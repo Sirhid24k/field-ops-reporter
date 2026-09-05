@@ -1,0 +1,129 @@
+@import "tailwindcss";
+
+/*
+  Design tokens — docs/design-brief.md §3 is the source of truth.
+  The default Tailwind palette, type scale and radii are removed on purpose so
+  nothing outside the system can be used by accident.
+*/
+@theme {
+  --color-*: initial;
+  --color-paper: #f8f8f4;
+  --color-ink: #161c1b;
+  --color-steel: #6e7573;
+  --color-line: #d6d9d4;
+  --color-hazard: #f5b800;
+  --color-hazard-ink: #8a6a00;
+  --color-convoy: #1e6e4b;
+  --color-flag: #c43d1f;
+
+  /* type scale: size / line-height */
+  --text-*: initial;
+  --text-caption: 13px;
+  --text-caption--line-height: 18px;
+  --text-body: 15px;
+  --text-body--line-height: 22px;
+  --text-body-lg: 17px;
+  --text-body-lg--line-height: 24px;
+  --text-heading: 22px;
+  --text-heading--line-height: 26px;
+  --text-title: 30px;
+  --text-title--line-height: 32px;
+  --text-hero: 44px;
+  --text-hero--line-height: 44px;
+  --text-board: 64px;
+  --text-board--line-height: 64px;
+
+  /* families are loaded in app/layout.tsx via next/font and exposed as
+     --font-body (Barlow 400/500) and --font-display (Barlow Condensed 600/700) */
+
+  --font-sans: var(--font-body, Barlow), sans-serif;
+
+  /* radius: 6 on controls and chips, 10 on the record sheet, 0 on tables and sections */
+  --radius-*: initial;
+  --radius-control: 6px;
+  --radius-sheet: 10px;
+}
+
+@utility font-body {
+  font-family: var(--font-body, Barlow), sans-serif;
+}
+
+@utility font-display {
+  font-family: var(--font-display, "Barlow Condensed"), sans-serif;
+}
+
+/* every numeric value in the product is tabular */
+@utility tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@layer base {
+  html {
+    background-color: var(--color-paper);
+    color: var(--color-ink);
+  }
+
+  body {
+    font-family: var(--font-body, Barlow), sans-serif;
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* visible focus on everything you can act on */
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 2px;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  /* motion only in response to the user; none at all when they ask for less */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      transition: none !important;
+      animation: none !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* motion — all of it responds to the user; page loads never animate */
+@theme {
+  --animate-text-pulse: text-pulse 1.6s ease-in-out infinite;
+  --animate-progress-line: progress-line 1.2s linear infinite;
+  --animate-sheet-in: sheet-in 220ms ease-out;
+  --animate-drawer-in: drawer-in 220ms ease-out;
+
+  @keyframes text-pulse {
+    50% {
+      opacity: 0.45;
+    }
+  }
+
+  @keyframes progress-line {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(250%);
+    }
+  }
+
+  @keyframes sheet-in {
+    from {
+      transform: translateY(100%);
+    }
+  }
+
+  @keyframes drawer-in {
+    from {
+      transform: translateX(100%);
+    }
+  }
+}

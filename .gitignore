@@ -1,3 +1,29 @@
-.env.local
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+
+# next.js
+/.next/
+/out/
+/build
+
+# env files — never commit real keys; .env.example is the template
+.env
+.env*.local
+
+# supabase cli
+/supabase/.temp
+/supabase/.branches
+
+# misc
+.DS_Store
+*.pem
+npm-debug.log*
+*.tsbuildinfo
+next-env.d.ts
+/.vercel
+
+# kept from the original repo
 /docs
 /design
