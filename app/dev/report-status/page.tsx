@@ -15,6 +15,9 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
+// evaluated per request, so DEV_TOOLS=true works on a deployment without a rebuild
+export const dynamic = "force-dynamic";
+
 const STATUSES = Constants.public.Enums.report_status;
 
 /**

@@ -32,15 +32,23 @@ Authentication → URL configuration → Redirect URLs so magic links come back 
 | `npm run lint` | ESLint |
 | `npm run db:push` | Apply migrations to the database in `SUPABASE_DB_URL` |
 | `npm run db:types` | Regenerate `lib/supabase/types.ts` (needs Docker) |
+| `npm run icons` | Regenerate the PWA icons in `public/icons` and `app/apple-icon.png` |
 | `npm run dev:magic-link -- <email> [next]` | Print a sign-in link without sending an email |
 | `npm run rls:proof -- <admin-email> <field-email>` | Prove the RLS policies with real user JWTs |
 
 ## Where things are
 
-- `app/` — routes. `(field)/app` is the driver PWA, `(admin)/dashboard` is the supervisor dashboard,
-  `onboarding`, `join/[code]`, `signin`, `auth/callback`. `dev/ui` is the primitive gallery.
+- `app/` — routes. `(field)/app` is the driver PWA (Today, `new`, `clarify/[reportId]`, `reports`),
+  `(admin)/dashboard` is the supervisor dashboard, `onboarding`, `join/[code]`, `signin`, `auth/callback`,
+  `api/ping` (connectivity probe). `dev/ui` is the primitive gallery; `dev/report-status` flips a report's
+  status for testing (off in production unless `DEV_TOOLS=true`). `manifest.ts` is the web app manifest.
 - `components/ui/` — the design-system primitives (Button, StatusChip, OdometerDigits, Input, Select,
-  Textarea, ProgressLine, Sheet, Drawer).
+  Textarea, ProgressLine, Sheet, Drawer). `components/field/` — the driver screens' parts (record control,
+  Today card, forms, the offline shell).
+- `lib/recorder.ts` (MediaRecorder), `lib/queue.ts` (IndexedDB offline queue), `lib/report-status.ts`
+  (status → chip/card mapping), `lib/dates.ts` (org-timezone formatting).
+- `public/sw.js` — the service worker; it only caches the app shell. Registered in production builds
+  (`next build && next start`), or in dev with `NEXT_PUBLIC_ENABLE_SW=1`.
 - `lib/supabase/` — server, browser, proxy and admin (service role, server-only) clients plus types.
 - `supabase/migrations/` — schema, RLS, storage.
 - `proxy.ts` — session refresh and routing by auth state.
