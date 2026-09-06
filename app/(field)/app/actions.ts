@@ -11,14 +11,16 @@ import {
 } from "@/lib/report-audio";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { createClient } from "@/lib/supabase/server";
+import type { Enums } from "@/lib/supabase/types";
 
 /**
  * The upload path (session-2 prompt §4). Called from the offline queue, so every action:
  *   - is idempotent: a retry after a dropped connection must not duplicate anything;
  *   - returns a value instead of redirecting: a background flush must never navigate;
  *   - checks ownership itself: field users have no update policy on reports or
- *     clarifications, so the two writes that need one run with the service role
- *     after the row has been read as the user (see docs/session-1-notes.md).
+ *     clarifications, so the writes that need one run with the service role, and only
+ *     after the row has been read as the user and its org and status checked
+ *     (see docs/session-1-notes.md and the close-out note in docs/session-2-notes.md).
  */
 
 export type ActionFailure = {
@@ -82,6 +84,9 @@ const markAnswerSchema = z.object({
 });
 
 type UserClient = Awaited<ReturnType<typeof createClient>>;
+type ReportStatus = Enums<"report_status">;
+
+const NOT_FOUND: ActionFailure = { ok: false, code: "not_found", message: "This report isn't yours or no longer exists." };
 
 async function fieldSession() {
   const session = await getSession();
@@ -102,6 +107,36 @@ async function findByClientUuid(supabase: UserClient, clientUuid: string) {
     .eq("client_uuid", clientUuid)
     .maybeSingle();
   return data;
+}
+
+/**
+ * The caller's own report, read as the user (RLS: own rows only) and checked against the
+ * caller's org. Every service-role write below runs only after this and a status check.
+ */
+async function ownedReport(supabase: UserClient, userId: string, orgId: string, reportId: string) {
+  const { data } = await supabase
+    .from("reports")
+    .select("id, org_id, status, audio_path")
+    .eq("id", reportId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  return data && data.org_id === orgId ? data : null;
+}
+
+/**
+ * A clarification can be answered only while the report is waiting for one and a question
+ * is still open. "done" = already answered on an earlier attempt whose response was lost.
+ */
+function answerGate(status: ReportStatus, openQuestions: number): ActionFailure | "done" | null {
+  if (openQuestions === 0) {
+    return status === "needs_clarification"
+      ? invalid("There's no open question on this report, so nothing was sent.")
+      : "done";
+  }
+  if (status !== "needs_clarification") {
+    return invalid(`This report isn't waiting for an answer (status ${status}), so nothing was sent.`);
+  }
+  return null;
 }
 
 async function signUpload(path: string): Promise<UploadTarget | null> {
@@ -190,14 +225,12 @@ export async function markUploaded(rawInput: unknown): Promise<SimpleResult> {
   if (!session) return UNAUTHENTICATED;
   const { supabase, user, organization } = session;
 
-  const { data: report } = await supabase
-    .from("reports")
-    .select("id, audio_path")
-    .eq("id", reportId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!report) return { ok: false, code: "not_found", message: "This report isn't yours or no longer exists." };
+  const report = await ownedReport(supabase, user.id, organization.id, reportId);
+  if (!report) return NOT_FOUND;
   if (report.audio_path === path) return { ok: true }; // confirmed on an earlier attempt
+  if (report.status !== "queued" || report.audio_path !== null) {
+    return invalid(`This report isn't waiting for a recording (status ${report.status}), so the upload wasn't attached.`);
+  }
 
   if (!extensionOf(path, `${organization.id}/${report.id}.`)) return invalid("That upload path isn't valid.");
   if (!(await objectExists(path))) return failed("The recording didn't reach the server. It will retry.");
@@ -259,16 +292,13 @@ export async function answerClarification(rawInput: unknown): Promise<AnswerResu
   if (!session) return UNAUTHENTICATED;
   const { supabase, user, organization } = session;
 
-  const { data: report } = await supabase
-    .from("reports")
-    .select("id")
-    .eq("id", input.reportId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!report) return { ok: false, code: "not_found", message: "This report isn't yours or no longer exists." };
+  const report = await ownedReport(supabase, user.id, organization.id, input.reportId);
+  if (!report) return NOT_FOUND;
 
   const questions = await openQuestions(supabase, report.id);
-  if (questions.open.length === 0) return { ok: true, upload: null }; // answered on an earlier attempt
+  const gate = answerGate(report.status, questions.open.length);
+  if (gate === "done") return { ok: true, upload: null }; // answered on an earlier attempt
+  if (gate) return gate;
 
   if (!input.hasAudio) {
     const done = await completeAnswer(report.id, { text: input.typedNote, audioPath: null });
@@ -290,16 +320,13 @@ export async function markAnswerUploaded(rawInput: unknown): Promise<SimpleResul
   if (!session) return UNAUTHENTICATED;
   const { supabase, user, organization } = session;
 
-  const { data: report } = await supabase
-    .from("reports")
-    .select("id")
-    .eq("id", reportId)
-    .eq("user_id", user.id)
-    .maybeSingle();
-  if (!report) return { ok: false, code: "not_found", message: "This report isn't yours or no longer exists." };
+  const report = await ownedReport(supabase, user.id, organization.id, reportId);
+  if (!report) return NOT_FOUND;
 
   const questions = await openQuestions(supabase, report.id);
-  if (questions.open.length === 0) return { ok: true }; // completed on an earlier attempt
+  const gate = answerGate(report.status, questions.open.length);
+  if (gate === "done") return { ok: true }; // completed on an earlier attempt
+  if (gate) return gate;
 
   const prefix = `${organization.id}/${report.id}-clarify-`;
   const valid = path.startsWith(prefix) && /^\d+\.(webm|m4a|ogg)$/.test(path.slice(prefix.length));
