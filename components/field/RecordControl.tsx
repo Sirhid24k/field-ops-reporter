@@ -143,7 +143,11 @@ export function RecordControl({
   const onPointerDown = (event: React.PointerEvent<HTMLButtonElement>) => {
     if (disabled || event.button !== 0) return;
     event.preventDefault();
-    event.currentTarget.setPointerCapture(event.pointerId);
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // synthetic or already-released pointer
+    }
     if (phase === "recording") {
       stop(); // tap to stop
       return;

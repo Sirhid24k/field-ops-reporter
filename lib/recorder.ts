@@ -114,6 +114,8 @@ export class Recorder {
       const Context = audioContextCtor();
       if (Context) {
         this.context = new Context();
+        // a context made outside a user gesture starts suspended; the bars would stay flat
+        void this.context.resume().catch(() => undefined);
         const source = this.context.createMediaStreamSource(this.stream);
         this.analyser = this.context.createAnalyser();
         this.analyser.fftSize = 64; // 32 bins; the UI reads 24 of them

@@ -151,6 +151,11 @@ async function putToSignedUrl(url: string, blob: Blob, mimeType: string | null):
   }
 }
 
+/** Sends one item now, without touching the store. The shell uses it when IndexedDB is unavailable. */
+export async function sendPending(item: PendingReport): Promise<void> {
+  return send(item);
+}
+
 async function send(item: PendingReport): Promise<void> {
   if (item.kind === "report") {
     const created = await createReport({

@@ -11,7 +11,16 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { addPending, flushQueue, listPending, subscribeQueue, type FlushResult, type PendingReport } from "@/lib/queue";
+import {
+  addPending,
+  flushQueue,
+  isNetworkError,
+  listPending,
+  sendPending,
+  subscribeQueue,
+  type FlushResult,
+  type PendingReport,
+} from "@/lib/queue";
 
 /**
  * Client shell for every field route: connectivity, the offline queue and the service worker.
@@ -115,7 +124,18 @@ export function FieldShell({ children }: { children: ReactNode }) {
 
   const submit = useCallback(
     async (item: PendingReport): Promise<SubmitOutcome> => {
-      await addPending(item);
+      try {
+        await addPending(item);
+      } catch {
+        // no IndexedDB (some private modes): send straight away rather than lose the report
+        try {
+          await sendPending(item);
+          setLastSentAt(Date.now());
+          return "sent";
+        } catch (error) {
+          return isNetworkError(error) ? "offline" : "failed";
+        }
+      }
       const result = await flushNow(true);
       if (result.sent.includes(item.clientUuid)) return "sent";
       const failure = result.failed.find((entry) => entry.clientUuid === item.clientUuid);
