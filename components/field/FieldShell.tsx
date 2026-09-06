@@ -137,8 +137,12 @@ export function FieldShell({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     registerServiceWorker();
-    void refreshPending();
     const unsubscribe = subscribeQueue(() => void refreshPending());
+    // first read of the queue and first ping, off the render path
+    const initial = setTimeout(() => {
+      void refreshPending();
+      void check(true);
+    }, 0);
 
     const onOnline = () => void check(true);
     const onVisibility = () => void check(true);
@@ -146,9 +150,9 @@ export function FieldShell({ children }: { children: ReactNode }) {
     window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisibility);
     const timer = setInterval(() => void check(false), TICK_MS);
-    void check(true);
 
     return () => {
+      clearTimeout(initial);
       unsubscribe();
       window.removeEventListener("online", onOnline);
       document.removeEventListener("visibilitychange", onVisibility);
