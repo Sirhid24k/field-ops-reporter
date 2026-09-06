@@ -1,8 +1,8 @@
-import { useId, type TextareaHTMLAttributes } from "react";
+import { useId, type ComponentPropsWithRef } from "react";
 import { cn } from "@/lib/cn";
 import { FieldError, FieldHint, FieldLabel, controlClass, type FieldSize } from "./field";
 
-export type TextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
+export type TextareaProps = ComponentPropsWithRef<"textarea"> & {
   label?: string;
   hint?: string;
   error?: string;
