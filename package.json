@@ -11,7 +11,8 @@
     "db:push": "node scripts/supabase-db.mjs push",
     "db:types": "node scripts/supabase-db.mjs types",
     "dev:magic-link": "tsx scripts/dev-magic-link.mts",
-    "rls:proof": "tsx scripts/rls-proof.mts"
+    "rls:proof": "tsx scripts/rls-proof.mts",
+    "icons": "tsx scripts/make-icons.mts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.6",
@@ -31,6 +32,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.4",
+    "sharp": "^0.35.4",
     "supabase": "^2.116.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.13",

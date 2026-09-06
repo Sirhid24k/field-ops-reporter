@@ -144,10 +144,15 @@ export function FieldShell({ children }: { children: ReactNode }) {
     [flushNow],
   );
 
-  /** Ping, then flush whatever is waiting. Only while the tab is visible and the network is up. */
+  /**
+   * Ping, then flush whatever is waiting. The periodic tick only runs while the tab is
+   * visible (battery); the first check and the online event always run, so a report sent
+   * from a backgrounded app still goes as soon as the page loads or the network returns.
+   */
   const check = useCallback(
-    async (force: boolean) => {
-      if (document.visibilityState !== "visible" || !navigator.onLine) return;
+    async (force: boolean, { onlyWhenVisible = false }: { onlyWhenVisible?: boolean } = {}) => {
+      if (!navigator.onLine) return;
+      if (onlyWhenVisible && document.visibilityState !== "visible") return;
       const reachable = await pingServer();
       setServerReachable(reachable);
       if (reachable && pendingCount.current > 0) await flushNow(force);
@@ -169,7 +174,7 @@ export function FieldShell({ children }: { children: ReactNode }) {
 
     window.addEventListener("online", onOnline);
     document.addEventListener("visibilitychange", onVisibility);
-    const timer = setInterval(() => void check(false), TICK_MS);
+    const timer = setInterval(() => void check(false, { onlyWhenVisible: true }), TICK_MS);
 
     return () => {
       clearTimeout(initial);

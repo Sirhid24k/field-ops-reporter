@@ -67,13 +67,9 @@ export function TodayCard({ vehicles, defaultVehicleId, reports, todayIso: serve
       (item.kind === "report" ? item.vehicleId === vehicleId : Boolean(report) && item.reportId === report?.id),
   );
 
-  const variant: TodayVariant | null = !pendingLoaded
-    ? null
-    : pendingHere
-      ? "queued"
-      : report
-        ? todayVariantFor(report.status)
-        : "not_reported";
+  // server rows first (so the page is right before hydration); the queue on this phone overrides once read
+  const variant: TodayVariant =
+    pendingLoaded && pendingHere ? "queued" : report ? todayVariantFor(report.status) : "not_reported";
 
   // poll while the pipeline is moving the report; stop on a terminal status
   const reportId = report?.id ?? null;
@@ -92,7 +88,7 @@ export function TodayCard({ vehicles, defaultVehicleId, reports, todayIso: serve
   }, [lastSentAt, router]);
 
   const action = (() => {
-    if (!variant || !vehicle) return null;
+    if (!vehicle) return null;
     if (variant === "needs_answer" && report) {
       return { href: `/app/clarify/${report.id}`, label: "Answer question", style: "primary" as const };
     }
@@ -137,7 +133,7 @@ export function TodayCard({ vehicles, defaultVehicleId, reports, todayIso: serve
               : "border border-line",
         )}
       >
-        {variant ? <CardBody variant={variant} report={report} cutoffLabel={cutoffLabel} timezone={timezone} /> : null}
+        <CardBody variant={variant} report={report} cutoffLabel={cutoffLabel} timezone={timezone} />
       </section>
 
       <Link href="/app/reports" className="mt-6 flex min-h-14 items-center justify-between border-b border-line text-body-lg">

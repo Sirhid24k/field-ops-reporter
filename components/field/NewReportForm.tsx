@@ -66,11 +66,11 @@ export function NewReportForm({ vehicles, defaultVehicleId, timezone }: NewRepor
       nextAttemptAt: now,
     };
     const result = await submit(item);
-    setSending(false);
     if (result === "sent") {
-      router.replace("/app");
+      router.replace("/app"); // stays in the sending state until Today takes over
       return;
     }
+    setSending(false);
     setOutcome(result);
   };
 
