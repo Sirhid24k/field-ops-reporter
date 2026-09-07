@@ -85,6 +85,7 @@ export type Database = {
         Row: {
           answer_audio_path: string | null;
           answer_text: string | null;
+          answer_transcript: string | null;
           answered_at: string | null;
           created_at: string;
           id: string;
@@ -95,6 +96,7 @@ export type Database = {
         Insert: {
           answer_audio_path?: string | null;
           answer_text?: string | null;
+          answer_transcript?: string | null;
           answered_at?: string | null;
           created_at?: string;
           id?: string;
@@ -105,6 +107,7 @@ export type Database = {
         Update: {
           answer_audio_path?: string | null;
           answer_text?: string | null;
+          answer_transcript?: string | null;
           answered_at?: string | null;
           created_at?: string;
           id?: string;
@@ -340,11 +343,13 @@ export type Database = {
           origin: string | null;
           processed_at: string | null;
           report_date: string;
+          requeue_count: number;
           reviewed_at: string | null;
           reviewed_by: string | null;
           source: Database["public"]["Enums"]["report_source"];
           status: Database["public"]["Enums"]["report_status"];
           submitted_at: string;
+          status_changed_at: string;
           summary: string | null;
           transcript: string | null;
           transcript_language: string | null;
@@ -373,11 +378,13 @@ export type Database = {
           origin?: string | null;
           processed_at?: string | null;
           report_date: string;
+          requeue_count?: number;
           reviewed_at?: string | null;
           reviewed_by?: string | null;
           source: Database["public"]["Enums"]["report_source"];
           status?: Database["public"]["Enums"]["report_status"];
           submitted_at?: string;
+          status_changed_at?: string;
           summary?: string | null;
           transcript?: string | null;
           transcript_language?: string | null;
@@ -406,11 +413,13 @@ export type Database = {
           origin?: string | null;
           processed_at?: string | null;
           report_date?: string;
+          requeue_count?: number;
           reviewed_at?: string | null;
           reviewed_by?: string | null;
           source?: Database["public"]["Enums"]["report_source"];
           status?: Database["public"]["Enums"]["report_status"];
           submitted_at?: string;
+          status_changed_at?: string;
           summary?: string | null;
           transcript?: string | null;
           transcript_language?: string | null;

@@ -1,7 +1,9 @@
 "use server";
 
+import { after } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth";
+import { triggerProcessing } from "@/lib/pipeline/internal";
 import {
   AUDIO_EXTENSIONS,
   clarificationAudioPath,
@@ -202,7 +204,9 @@ export async function createReport(rawInput: unknown): Promise<CreateReportResul
     } else {
       report = inserted;
       if (!input.hasAudio) {
-        // SESSION 3: fire /api/process?report_id=${report.id} — a typed-only report is complete on insert.
+        // a typed-only report is complete on insert: start the pipeline once this response is out
+        const typedReportId = inserted.id;
+        after(() => triggerProcessing(typedReportId));
       }
     }
     if (!report) return failed("Couldn't save the report. It's saved on your phone and will retry.");
@@ -239,7 +243,8 @@ export async function markUploaded(rawInput: unknown): Promise<SimpleResult> {
   const { error } = await admin.from("reports").update({ audio_path: path }).eq("id", report.id);
   if (error) return failed("Couldn't confirm the upload. It will retry.");
 
-  // SESSION 3: fire /api/process?report_id=${report.id} — the audio is in storage; processing can start.
+  // the audio is in storage: start the pipeline once this response is out
+  after(() => triggerProcessing(report.id));
   return { ok: true };
 }
 
@@ -270,10 +275,14 @@ async function completeAnswer(
     .is("answered_at", null);
   if (clarificationError) return false;
 
-  const { error: reportError } = await admin.from("reports").update({ status: "queued" }).eq("id", reportId);
+  const { error: reportError } = await admin
+    .from("reports")
+    .update({ status: "queued", requeue_count: 0, error: null, processed_at: null })
+    .eq("id", reportId);
   if (reportError) return false;
 
-  // SESSION 3: fire /api/process?report_id=${reportId} — the answer is in; reprocess from queued.
+  // the answer is in: reprocess from queued once this response is out
+  after(() => triggerProcessing(reportId));
   return true;
 }
 

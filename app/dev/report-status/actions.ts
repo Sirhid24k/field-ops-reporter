@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import { requireMember } from "@/lib/auth";
 import { devToolsEnabled } from "@/lib/dev-tools";
+import { processReport } from "@/lib/pipeline/process";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Constants, type Enums } from "@/lib/supabase/types";
 
@@ -59,6 +60,17 @@ export async function setStatus(formData: FormData): Promise<void> {
       error: status === "failed" ? "Flipped to failed from /dev/report-status" : null,
     })
     .eq("id", report.id);
+  revalidatePath("/dev/report-status");
+}
+
+/** Puts the report back to `queued` and runs the pipeline inline (session 3), then shows the result. */
+export async function runPipeline(formData: FormData): Promise<void> {
+  const { admin, report } = await ownedReport(formData);
+  await admin
+    .from("reports")
+    .update({ status: "queued", requeue_count: 0, error: null, processed_at: null })
+    .eq("id", report.id);
+  await processReport(admin, report.id);
   revalidatePath("/dev/report-status");
 }
 

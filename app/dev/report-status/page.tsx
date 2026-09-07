@@ -8,7 +8,7 @@ import { devToolsEnabled } from "@/lib/dev-tools";
 import { chipForStatus } from "@/lib/report-status";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Constants } from "@/lib/supabase/types";
-import { askQuestion, clearSample, deleteReport, fillSample, setStatus } from "./actions";
+import { askQuestion, clearSample, deleteReport, fillSample, runPipeline, setStatus } from "./actions";
 
 export const metadata: Metadata = {
   title: "Report status (dev)",
@@ -32,7 +32,7 @@ export default async function ReportStatusDevPage() {
   const admin = createAdminClient();
   const { data: reports } = await admin
     .from("reports")
-    .select("id, report_date, submitted_at, status, source, origin, destination, distance_km, audio_path, vehicles(plate_number), profiles!reports_user_id_fkey(full_name)")
+    .select("id, report_date, submitted_at, status, source, origin, destination, distance_km, audio_path, error, summary, vehicles(plate_number), profiles!reports_user_id_fkey(full_name)")
     .eq("org_id", profile.org_id)
     .order("submitted_at", { ascending: false })
     .limit(12);
@@ -42,7 +42,7 @@ export default async function ReportStatusDevPage() {
       <p className="text-caption text-steel">{organization.name}, developer tools</p>
       <h1 className="mt-2 font-display text-title font-bold">Report status</h1>
       <p className="mt-2 max-w-[70ch] text-body-lg text-steel">
-        Flip a report through the statuses the pipeline will set in session 3, then check{" "}
+        Flip a report through the statuses, or run the real pipeline on it, then check{" "}
         <Link href="/app" className="text-ink underline underline-offset-4">
           Today
         </Link>
@@ -70,6 +70,8 @@ export default async function ReportStatusDevPage() {
                   {report.distance_km !== null ? `, ${report.distance_km} km` : ""}
                 </p>
                 <p className="mt-1 text-caption text-steel">{report.id}</p>
+                {report.summary ? <p className="mt-1 text-caption">{report.summary}</p> : null}
+                {report.error ? <p className="mt-1 text-caption text-flag">{report.error}</p> : null}
 
                 <form action={setStatus} className="mt-3 flex flex-wrap gap-2">
                   <input type="hidden" name="reportId" value={report.id} />
@@ -101,6 +103,12 @@ export default async function ReportStatusDevPage() {
                 </form>
 
                 <div className="mt-3 flex flex-wrap gap-2">
+                  <form action={runPipeline}>
+                    <input type="hidden" name="reportId" value={report.id} />
+                    <Button type="submit" className="min-h-10 px-3 text-body">
+                      Run pipeline
+                    </Button>
+                  </form>
                   <form action={fillSample}>
                     <input type="hidden" name="reportId" value={report.id} />
                     <Button type="submit" variant="secondary" className="min-h-10 px-3 text-body">
