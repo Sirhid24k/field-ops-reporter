@@ -22,8 +22,11 @@ default), `STT_PROVIDER=groq` with `STT_API_KEY` (a Groq key; `STT_MODEL` defaul
 `CRON_SECRET` (any long random string; it guards `/api/process` and `/api/cron/*`). `.env.example` documents the
 optional ones (`PIPELINE_BASE_URL`, `VERCEL_AUTOMATION_BYPASS_SECRET`).
 
-In the Supabase dashboard, add `http://localhost:3000/**` (and your deployed origin) under
-Authentication → URL configuration → Redirect URLs so magic links come back to the app.
+Sign-in is an email one-time code. In the Supabase dashboard: set Authentication → Email → "Email OTP length"
+to match `NEXT_PUBLIC_OTP_LENGTH` (default 6); paste the email templates from `docs/auth-fix-notes.md` under
+Authentication → Email Templates (Magic Link and Confirm signup) so the email carries the code and a token-hash
+link; and add `http://localhost:3000/**` plus your deployed origin `/**` under Authentication → URL configuration
+→ Redirect URLs so the fallback link comes back to the app.
 
 ## Scripts
 
@@ -36,7 +39,7 @@ Authentication → URL configuration → Redirect URLs so magic links come back 
 | `npm run db:push` | Apply migrations to the database in `SUPABASE_DB_URL` |
 | `npm run db:types` | Regenerate `lib/supabase/types.ts` (needs Docker) |
 | `npm run icons` | Regenerate the PWA icons in `public/icons` and `app/apple-icon.png` |
-| `npm run dev:magic-link -- <email> [next]` | Print a sign-in link without sending an email |
+| `npm run dev:magic-link -- <email> [next]` | Print a sign-in code and a token-hash link without sending an email |
 | `npm run rls:proof -- <admin-email> <field-email>` | Prove the RLS policies with real user JWTs |
 | `npm run test` | Vitest unit tests (the validation rules) |
 | `npm run pipeline:test -- <audio-file>` | Upload a clip as a report for the demo driver and run the pipeline inline, printing transcript, fields, checks, questions and alerts. Also `--text "…"`, `--report <id> --answer "…"`, `--answer-audio <file>`, `--cleanup` |
@@ -44,7 +47,8 @@ Authentication → URL configuration → Redirect URLs so magic links come back 
 
 ## Where things are
 
-- `app/` — routes. `(field)/app` is the driver PWA (Today, `new`, `clarify/[reportId]`, `reports`),
+- `app/` — routes. `signin` (email → code, `components/auth/CodeStep.tsx`), `auth/callback` (the email link,
+  a fallback), `join/[code]` (invite: name + email → code). `(field)/app` is the driver PWA (Today, `new`, `clarify/[reportId]`, `reports`),
   `(admin)/dashboard` is the supervisor dashboard, `onboarding`, `join/[code]`, `signin`, `auth/callback`,
   `api/ping` (connectivity probe), `api/process` (the pipeline worker, internal), `api/cron/sweep` and
   `api/cron/digest` (Vercel crons, see `vercel.json`). `dev/ui` is the primitive gallery; `dev/report-status`

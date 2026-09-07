@@ -1,7 +1,10 @@
-// Prints a sign-in link for local testing without sending an email.
+// Prints a sign-in code and link for local testing without sending an email.
 //   npm run dev:magic-link -- <email> [next-path] [--name "Full Name"]
 // Uses the service role (server-side only). The user is created if it does not exist;
 // --name is stored as user metadata (full_name), the same way the invite form does it.
+// The code goes into the code step of /signin or /join/[code]; the link is the
+// token-hash callback (same as a custom email template), which works in any browser.
+// Both come from one generateLink call, so using one invalidates the other.
 import { createClient } from "@supabase/supabase-js";
 import nextEnv from "@next/env"; // CommonJS package: default import, then destructure
 
@@ -39,5 +42,6 @@ if (error || !data.properties) {
   process.exit(1);
 }
 
-const { hashed_token, verification_type } = data.properties;
+const { hashed_token, verification_type, email_otp } = data.properties;
+console.log(`code: ${email_otp}`);
 console.log(`${appUrl}/auth/callback?token_hash=${hashed_token}&type=${verification_type}&next=${encodeURIComponent(next)}`);

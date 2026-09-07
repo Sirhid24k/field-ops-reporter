@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { signOut } from "@/app/auth/actions";
 import { Button, SubmitButton } from "@/components/ui";
 import { getSession } from "@/lib/auth";
-import { getInviteByCode } from "@/lib/invites";
+import { PENDING_EMAIL_COOKIE } from "@/lib/auth-otp";
+import { getInviteByCode, PENDING_NAME_COOKIE } from "@/lib/invites";
 import { homeFor, roleLabel } from "@/lib/roles";
 import { joinNow } from "./actions";
 import { JoinForm } from "./JoinForm";
@@ -12,7 +14,7 @@ import { JoinForm } from "./JoinForm";
 export const metadata: Metadata = { title: "Join" };
 
 type Params = Promise<{ code: string }>;
-type SearchParams = Promise<{ error?: string }>;
+type SearchParams = Promise<{ error?: string; step?: string; reason?: string }>;
 
 function Shell({ children }: { children: ReactNode }) {
   return (
@@ -36,7 +38,7 @@ function Heading({ orgName, role }: { orgName: string; role: string }) {
 }
 
 const ERRORS: Record<string, string> = {
-  link: "That sign-in link didn't work. It may have expired. Send a new one.",
+  link: "That sign-in link didn't work here. Enter the code from the same email instead.",
   used: "This invite link has already been used. Ask your supervisor for a new one.",
   expired: "This invite link has expired. Ask your supervisor for a new one.",
   invalid: "This invite link isn't valid anymore. Ask your supervisor for a new one.",
@@ -46,19 +48,19 @@ const ERRORS: Record<string, string> = {
 /** F1 — sign in from invite. Handles every state of the invite and of the visitor. */
 export default async function JoinPage({ params, searchParams }: { params: Params; searchParams: SearchParams }) {
   const { code } = await params;
-  const { error } = await searchParams;
+  const { error, step, reason } = await searchParams;
 
-  const [invite, { user, profile }] = await Promise.all([getInviteByCode(code), getSession()]);
+  const [invite, { user, profile }, cookieStore] = await Promise.all([getInviteByCode(code), getSession(), cookies()]);
 
   // someone who already belongs to this org (e.g. re-opening the link they joined with) just goes home
   if (user && profile && (!invite || profile.org_id === invite.orgId)) redirect(homeFor(profile.role));
 
   if (!invite || invite.status !== "valid") {
-    const reason = invite?.status ?? "invalid";
+    const status = invite?.status ?? "invalid";
     return (
       <Shell>
         <h1 className="mt-10 font-display text-title font-bold">This link doesn&rsquo;t work</h1>
-        <p className="mt-3 text-body-lg">{ERRORS[reason]}</p>
+        <p className="mt-3 text-body-lg">{ERRORS[status]}</p>
         <div className="flex-1" />
         {user ? (
           <form action={signOut}>
@@ -110,10 +112,28 @@ export default async function JoinPage({ params, searchParams }: { params: Param
     );
   }
 
+  // a failed email link (/auth/callback) comes back here with step=code&reason=link
+  const pendingEmail = cookieStore.get(PENDING_EMAIL_COOKIE)?.value ?? undefined;
+  const pendingName = cookieStore.get(PENDING_NAME_COOKIE)?.value ?? undefined;
+  const fromLink = reason === "link" || error === "link";
+  const startOnCode = step === "code" && pendingEmail !== undefined;
+  const notice = fromLink
+    ? startOnCode
+      ? ERRORS.link
+      : "That sign-in link didn't work here. Enter your details and we'll send you a code."
+    : undefined;
+
   return (
     <Shell>
       <Heading orgName={invite.orgName} role={role} />
-      <JoinForm code={invite.code} initialError={error ? ERRORS[error] : undefined} />
+      <JoinForm
+        code={invite.code}
+        initialError={error && error !== "link" ? ERRORS[error] : undefined}
+        initialEmail={pendingEmail}
+        initialName={pendingName}
+        initialStep={startOnCode ? "code" : "form"}
+        notice={notice}
+      />
     </Shell>
   );
 }
