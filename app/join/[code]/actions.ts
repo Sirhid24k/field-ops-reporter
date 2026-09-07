@@ -12,9 +12,9 @@ import {
   PENDING_EMAIL_COOKIE,
   PENDING_EMAIL_MAX_AGE,
 } from "@/lib/auth-otp";
-import { publicEnv } from "@/lib/env";
 import { fieldErrorsFrom, text } from "@/lib/forms";
 import { completeJoin, getInviteByCode, PENDING_INVITE_COOKIE, PENDING_NAME_COOKIE } from "@/lib/invites";
+import { getRequestOrigin } from "@/lib/request-origin";
 import { homeFor } from "@/lib/roles";
 import { createClient } from "@/lib/supabase/server";
 
@@ -56,11 +56,12 @@ export async function sendJoinCode(_prev: JoinSendState, formData: FormData): Pr
   if (!invite || invite.status !== "valid") return { step: "form", error: INVALID, values };
 
   const supabase = await createClient();
+  const origin = await getRequestOrigin(); // this deployment's host, so the link comes back here (previews too)
   const { error } = await supabase.auth.signInWithOtp({
     email: parsed.data.email,
     options: {
       // the link in the same email: the fallback path, which completes the join in /join/[code]/complete
-      emailRedirectTo: `${publicEnv.appUrl}/auth/callback?next=${encodeURIComponent(`/join/${invite.code}/complete`)}`,
+      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(`/join/${invite.code}/complete`)}`,
       data: { full_name: parsed.data.fullName },
     },
   });

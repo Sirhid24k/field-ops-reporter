@@ -24,20 +24,24 @@ export function isInternalRequest(request: Request): boolean {
 }
 
 /**
- * Where this deployment reaches itself. PIPELINE_BASE_URL overrides; on Vercel the
- * deployment's own URL (so a preview never posts to production); locally the app URL.
+ * Where this deployment reaches itself. PIPELINE_BASE_URL overrides; otherwise the origin
+ * of the request that is triggering (lib/request-origin.ts, so a preview posts to itself and
+ * never to production); without a request (crons, scripts) NEXT_PUBLIC_APP_URL.
  */
-export function internalBaseUrl(): string {
+export function internalBaseUrl(origin?: string | null): string {
   const explicit = process.env.PIPELINE_BASE_URL?.trim();
   if (explicit) return explicit.replace(/\/+$/, "");
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
+  if (origin) return origin.replace(/\/+$/, "");
   return publicEnv.appUrl;
 }
 
 const TRIGGER_TIMEOUT_MS = 10_000;
 
-/** POST /api/process for one report, fire-and-forget: logs instead of throwing. */
-export async function triggerProcessing(reportId: string): Promise<boolean> {
+/**
+ * POST /api/process for one report, fire-and-forget: logs instead of throwing. Callers with
+ * a request in scope pass its origin (`await getRequestOrigin()`, resolved before `after()`).
+ */
+export async function triggerProcessing(reportId: string, options: { origin?: string | null } = {}): Promise<boolean> {
   const secret = process.env.CRON_SECRET;
   if (!secret) {
     logPipeline({ step: "trigger", reportId, outcome: "skipped", reason: "CRON_SECRET is not set; the sweep will pick the report up" });
@@ -52,7 +56,7 @@ export async function triggerProcessing(reportId: string): Promise<boolean> {
   if (bypass) headers["x-vercel-protection-bypass"] = bypass;
 
   try {
-    const response = await fetch(`${internalBaseUrl()}/api/process`, {
+    const response = await fetch(`${internalBaseUrl(options.origin)}/api/process`, {
       method: "POST",
       headers,
       body: JSON.stringify({ reportId }),

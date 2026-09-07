@@ -16,7 +16,8 @@ npm run dev
 ```
 
 `.env.local` needs: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
-(server-only), `SUPABASE_DB_URL` (session-pooler connection string, used by the db scripts), `NEXT_PUBLIC_APP_URL`,
+(server-only), `SUPABASE_DB_URL` (session-pooler connection string, used by the db scripts), `NEXT_PUBLIC_APP_URL`
+(the fallback origin; sign-in redirects and invite links derive the origin from the request),
 and for the pipeline: `GEMINI_API_KEY` with `EXTRACTION_MODEL` / `DIGEST_MODEL` (both `gemini-3.5-flash` by
 default), `STT_PROVIDER=groq` with `STT_API_KEY` (a Groq key; `STT_MODEL` defaults to `whisper-large-v3`), and
 `CRON_SECRET` (any long random string; it guards `/api/process` and `/api/cron/*`). `.env.example` documents the

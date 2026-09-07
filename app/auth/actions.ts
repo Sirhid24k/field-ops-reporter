@@ -13,7 +13,7 @@ import {
   PENDING_EMAIL_MAX_AGE,
   safeNext,
 } from "@/lib/auth-otp";
-import { publicEnv } from "@/lib/env";
+import { getRequestOrigin } from "@/lib/request-origin";
 import { createClient } from "@/lib/supabase/server";
 
 /**
@@ -48,11 +48,12 @@ export async function sendSignInCode(_prev: SendCodeState, formData: FormData): 
   const next = safeNext(String(formData.get("next") ?? ""));
 
   const supabase = await createClient();
+  const origin = await getRequestOrigin(); // this deployment's host, so the link comes back here (previews too)
   const { error } = await supabase.auth.signInWithOtp({
     email: parsed.data,
     options: {
-      // the link in the same email; works in the browser that opened it (token-hash template) or any (PKCE)
-      emailRedirectTo: `${publicEnv.appUrl}/auth/callback?next=${encodeURIComponent(next)}`,
+      // the link in the same email: any browser with the token-hash template, same browser only with PKCE
+      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
     },
   });
   if (error) return { step: "email", error: describeSendError(error.code), values: { email } };

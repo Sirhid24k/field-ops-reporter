@@ -5,6 +5,7 @@ import { isInternalRequest, triggerProcessing } from "@/lib/pipeline/internal";
 import { logPipeline } from "@/lib/pipeline/log";
 import { processReport } from "@/lib/pipeline/process";
 import { sweepStuckReports } from "@/lib/pipeline/sweep";
+import { getRequestOrigin } from "@/lib/request-origin";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
@@ -48,10 +49,12 @@ export async function POST(request: Request) {
     return Response.json(outcome, { headers: NO_STORE });
   }
 
+  const origin = await getRequestOrigin(); // the swept reports are triggered on this same deployment
+
   after(async () => {
     try {
       const swept = await sweepStuckReports(db);
-      await Promise.all(swept.requeued.filter((id) => id !== reportId).map((id) => triggerProcessing(id)));
+      await Promise.all(swept.requeued.filter((id) => id !== reportId).map((id) => triggerProcessing(id, { origin })));
     } catch (error) {
       logPipeline({ step: "sweep", outcome: "error", error: errorMessage(error) });
     }

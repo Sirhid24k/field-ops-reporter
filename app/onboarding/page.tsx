@@ -5,6 +5,7 @@ import { buttonClassName, SubmitButton, Button } from "@/components/ui";
 import { getSession } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { inviteMessage, inviteUrl, whatsappShareUrl } from "@/lib/invites";
+import { getRequestOrigin } from "@/lib/request-origin";
 import { isStaff } from "@/lib/roles";
 import { generateInvite, skipVehicle } from "./actions";
 import { CopyLinkButton } from "./CopyLinkButton";
@@ -26,6 +27,7 @@ export default async function OnboardingPage({ searchParams }: { searchParams: S
   if (profile && !isStaff(profile.role)) redirect("/app");
 
   const step: 1 | 2 | 3 = !profile || !organization ? 1 : stepParam === "3" ? 3 : 2;
+  const origin = await getRequestOrigin(); // invite links point at the host this page was opened on
 
   let invite: { code: string } | null = null;
   if (step === 3 && organization) {
@@ -78,13 +80,13 @@ export default async function OnboardingPage({ searchParams }: { searchParams: S
             <>
               <p className="mt-7 text-caption text-steel">Invite link</p>
               <p className="mt-1.5 select-all rounded-control border border-line bg-ink/6 px-3 py-3 text-body break-all">
-                {inviteUrl(invite.code)}
+                {inviteUrl(origin, invite.code)}
               </p>
               <p className="mt-1.5 text-caption text-steel">Works once, for 7 days.</p>
               <div className="mt-4 flex gap-3">
-                <CopyLinkButton link={inviteUrl(invite.code)} />
+                <CopyLinkButton link={inviteUrl(origin, invite.code)} />
                 <a
-                  href={whatsappShareUrl(inviteMessage(organization.name, "field", invite.code))}
+                  href={whatsappShareUrl(inviteMessage(origin, organization.name, "field", invite.code))}
                   target="_blank"
                   rel="noreferrer"
                   className={buttonClassName({ variant: "secondary", block: true })}

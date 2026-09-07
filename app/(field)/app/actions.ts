@@ -11,6 +11,7 @@ import {
   reportAudioPath,
   type AudioExtension,
 } from "@/lib/report-audio";
+import { getRequestOrigin } from "@/lib/request-origin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { createClient } from "@/lib/supabase/server";
 import type { Enums } from "@/lib/supabase/types";
@@ -206,7 +207,8 @@ export async function createReport(rawInput: unknown): Promise<CreateReportResul
       if (!input.hasAudio) {
         // a typed-only report is complete on insert: start the pipeline once this response is out
         const typedReportId = inserted.id;
-        after(() => triggerProcessing(typedReportId));
+        const origin = await getRequestOrigin();
+        after(() => triggerProcessing(typedReportId, { origin }));
       }
     }
     if (!report) return failed("Couldn't save the report. It's saved on your phone and will retry.");
@@ -244,7 +246,8 @@ export async function markUploaded(rawInput: unknown): Promise<SimpleResult> {
   if (error) return failed("Couldn't confirm the upload. It will retry.");
 
   // the audio is in storage: start the pipeline once this response is out
-  after(() => triggerProcessing(report.id));
+  const origin = await getRequestOrigin();
+  after(() => triggerProcessing(report.id, { origin }));
   return { ok: true };
 }
 
@@ -282,7 +285,8 @@ async function completeAnswer(
   if (reportError) return false;
 
   // the answer is in: reprocess from queued once this response is out
-  after(() => triggerProcessing(reportId));
+  const origin = await getRequestOrigin();
+  after(() => triggerProcessing(reportId, { origin }));
   return true;
 }
 

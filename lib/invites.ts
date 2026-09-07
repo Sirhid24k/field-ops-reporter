@@ -2,14 +2,13 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 import type { SupabaseClient, User } from "@supabase/supabase-js";
-import { publicEnv } from "@/lib/env";
 import { roleLabel, type UserRole } from "@/lib/roles";
 import { createAdminClient } from "@/lib/supabase/admin";
 import type { Database } from "@/lib/supabase/types";
 
 export const INVITE_TTL_DAYS = 7;
 
-/** Cookies that carry an in-progress invite across the magic-link round trip. */
+/** Cookies that carry an in-progress invite across the sign-in round trip. */
 export { PENDING_INVITE_COOKIE, PENDING_NAME_COOKIE } from "@/lib/invites-shared";
 
 const CODE_PATTERN = /^[A-Za-z0-9_-]{6,64}$/;
@@ -19,12 +18,13 @@ export function generateInviteCode(): string {
   return randomBytes(9).toString("base64url");
 }
 
-export function inviteUrl(code: string): string {
-  return `${publicEnv.appUrl}/join/${code}`;
+/** `origin` is the request's (lib/request-origin.ts), so the link comes back to the deployment that made it. */
+export function inviteUrl(origin: string, code: string): string {
+  return `${origin.replace(/\/+$/, "")}/join/${code}`;
 }
 
-export function inviteMessage(orgName: string, role: UserRole, code: string): string {
-  return `${orgName} added you as a ${roleLabel(role)} on Field Ops Reporter. Open this link on your phone to sign in: ${inviteUrl(code)}`;
+export function inviteMessage(origin: string, orgName: string, role: UserRole, code: string): string {
+  return `${orgName} added you as a ${roleLabel(role)} on Field Ops Reporter. Open this link on your phone to sign in: ${inviteUrl(origin, code)}`;
 }
 
 export function whatsappShareUrl(text: string): string {
