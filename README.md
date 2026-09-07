@@ -15,9 +15,12 @@ npm run db:push              # applies supabase/migrations to your project
 npm run dev
 ```
 
-`.env.local` needs, at minimum for this stage: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`,
-`SUPABASE_SERVICE_ROLE_KEY` (server-only), `SUPABASE_DB_URL` (session-pooler connection string, used by the
-db scripts) and `NEXT_PUBLIC_APP_URL`.
+`.env.local` needs: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`
+(server-only), `SUPABASE_DB_URL` (session-pooler connection string, used by the db scripts), `NEXT_PUBLIC_APP_URL`,
+and for the pipeline: `GEMINI_API_KEY` with `EXTRACTION_MODEL` / `DIGEST_MODEL` (both `gemini-3.5-flash` by
+default), `STT_PROVIDER=groq` with `STT_API_KEY` (a Groq key; `STT_MODEL` defaults to `whisper-large-v3`), and
+`CRON_SECRET` (any long random string; it guards `/api/process` and `/api/cron/*`). `.env.example` documents the
+optional ones (`PIPELINE_BASE_URL`, `VERCEL_AUTOMATION_BYPASS_SECRET`).
 
 In the Supabase dashboard, add `http://localhost:3000/**` (and your deployed origin) under
 Authentication → URL configuration → Redirect URLs so magic links come back to the app.
@@ -35,13 +38,23 @@ Authentication → URL configuration → Redirect URLs so magic links come back 
 | `npm run icons` | Regenerate the PWA icons in `public/icons` and `app/apple-icon.png` |
 | `npm run dev:magic-link -- <email> [next]` | Print a sign-in link without sending an email |
 | `npm run rls:proof -- <admin-email> <field-email>` | Prove the RLS policies with real user JWTs |
+| `npm run test` | Vitest unit tests (the validation rules) |
+| `npm run pipeline:test -- <audio-file>` | Upload a clip as a report for the demo driver and run the pipeline inline, printing transcript, fields, checks, questions and alerts. Also `--text "…"`, `--report <id> --answer "…"`, `--answer-audio <file>`, `--cleanup` |
+| `npm run digest:test -- [YYYY-MM-DD]` | Generate the daily digest for the demo org inline and cross-check its totals against the rows |
 
 ## Where things are
 
 - `app/` — routes. `(field)/app` is the driver PWA (Today, `new`, `clarify/[reportId]`, `reports`),
   `(admin)/dashboard` is the supervisor dashboard, `onboarding`, `join/[code]`, `signin`, `auth/callback`,
-  `api/ping` (connectivity probe). `dev/ui` is the primitive gallery; `dev/report-status` flips a report's
-  status for testing (off in production unless `DEV_TOOLS=true`). `manifest.ts` is the web app manifest.
+  `api/ping` (connectivity probe), `api/process` (the pipeline worker, internal), `api/cron/sweep` and
+  `api/cron/digest` (Vercel crons, see `vercel.json`). `dev/ui` is the primitive gallery; `dev/report-status`
+  flips a report's status or runs the pipeline on it (off in production unless `DEV_TOOLS=true`).
+  `manifest.ts` is the web app manifest.
+- `lib/pipeline/` — the processing pipeline: `process.ts` (state machine, compare-and-set on status),
+  `stt.ts` (Groq Whisper adapter + language labels), `extract.ts` (Gemini structured output, spec §6),
+  `validate.ts` (the deterministic rules and every threshold; `validate.test.ts`), `clarify.ts` (one round of
+  driver questions), `digest.ts` (stats from the rows, markdown from the model), `sweep.ts` (stuck-report
+  re-queue with bounded retries), `internal.ts` (CRON_SECRET guard and the fire-and-forget trigger).
 - `components/ui/` — the design-system primitives (Button, StatusChip, OdometerDigits, Input, Select,
   Textarea, ProgressLine, Sheet, Drawer). `components/field/` — the driver screens' parts (record control,
   Today card, forms, the offline shell).
