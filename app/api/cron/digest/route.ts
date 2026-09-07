@@ -3,10 +3,14 @@ import { isInternalRequest } from "@/lib/pipeline/internal";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
- * GET /api/cron/digest — every 15 minutes (vercel.json). For each organisation whose local
- * time is past its report cutoff and that has no digest for its local date yet: raise the
- * missing-report alerts, then generate the digest. A rate-limited model call leaves the
- * org for the next run ("deferred"); nothing is written half-done.
+ * GET /api/cron/digest — once a day at 19:30 UTC (vercel.json). Vercel Hobby only allows
+ * daily crons and fires them anywhere within the scheduled hour, so this lands between
+ * 20:30 and 21:29 Africa/Lagos: after the demo org's 20:00 cutoff either way. One pass closes
+ * the latest reporting day for every organisation (today after its cutoff, else yesterday),
+ * skips orgs already generated, and raises the missing-report alerts in the same pass. A
+ * rate-limited model call leaves the org for the next run ("deferred"); nothing is written
+ * half-done. Demos and organisations whose cutoff is later than the cron hour use on-demand
+ * generation from the dashboard (`generateDigestNow`, the same lib).
  */
 
 export const dynamic = "force-dynamic";

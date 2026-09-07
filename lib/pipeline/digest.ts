@@ -88,6 +88,22 @@ export function cutoffMinutes(time: string): number {
   return (Number.isFinite(hours) ? hours : 0) * 60 + (Number.isFinite(minutes) ? minutes : 0);
 }
 
+/** YYYY-MM-DD minus one day. */
+function previousDate(date: string): string {
+  const [year, month, day] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day - 1)).toISOString().slice(0, 10);
+}
+
+/**
+ * The reporting day a cron run should close: today once the organisation's cutoff has
+ * passed, otherwise yesterday. Written for a cron that fires once a day at an imprecise hour
+ * (Vercel Hobby: daily, anywhere within the scheduled hour), so a run that lands before an
+ * organisation's cutoff still closes its previous day instead of skipping it.
+ */
+export function digestDateFor(clock: { date: string; minutes: number }, cutoff: number): { date: string; target: "today" | "yesterday" } {
+  return clock.minutes >= cutoff ? { date: clock.date, target: "today" } : { date: previousDate(clock.date), target: "yesterday" };
+}
+
 /** The UTC instants [start, end) of one local calendar day. */
 export function utcRangeForLocalDay(date: string, timeZone: string): { start: string; end: string } {
   const [year, month, day] = date.split("-").map(Number);
@@ -371,41 +387,49 @@ export async function generateDigest(
   return { data, content_md: content, source };
 }
 
-export type DigestCronOutcome = { orgId: string; date: string; outcome: "generated" | "exists" | "before_cutoff" | "deferred" | "error"; detail?: string };
+export type DigestCronOutcome = {
+  orgId: string;
+  date: string;
+  target: "today" | "yesterday";
+  outcome: "generated" | "exists" | "deferred" | "error";
+  detail?: string;
+};
 
-/** For each org past its local cutoff with no digest for its local date: missing-report alerts, then the digest. */
+/**
+ * One pass for every organisation: pick the latest reporting day whose cutoff has passed
+ * (today after the cutoff, else yesterday), skip it when its digest already exists, otherwise
+ * raise the missing-report alerts and write the digest (both inside `generateDigest`).
+ * Idempotent, so it is safe to run once a day at any hour (Vercel Hobby) or more often; a
+ * rate-limited model call leaves the org for the next run or an on-demand generation.
+ */
 export async function runDigestCron(db: PipelineDb, now: Date = new Date()): Promise<DigestCronOutcome[]> {
   const { data: orgs, error } = await db.from("organizations").select("id, name, timezone, report_cutoff_time");
   if (error) throw new Error(`Digest cron could not read organisations: ${error.message}`);
 
   const outcomes: DigestCronOutcome[] = [];
   for (const org of orgs ?? []) {
-    const clock = localClock(org.timezone, now);
-    if (clock.minutes < cutoffMinutes(org.report_cutoff_time)) {
-      outcomes.push({ orgId: org.id, date: clock.date, outcome: "before_cutoff" });
-      continue;
-    }
+    const { date, target } = digestDateFor(localClock(org.timezone, now), cutoffMinutes(org.report_cutoff_time));
     const { data: existing, error: existingError } = await db
       .from("daily_digests")
       .select("id")
       .eq("org_id", org.id)
-      .eq("digest_date", clock.date)
+      .eq("digest_date", date)
       .maybeSingle();
     if (existingError) {
-      outcomes.push({ orgId: org.id, date: clock.date, outcome: "error", detail: existingError.message });
+      outcomes.push({ orgId: org.id, date, target, outcome: "error", detail: existingError.message });
       continue;
     }
     if (existing) {
-      outcomes.push({ orgId: org.id, date: clock.date, outcome: "exists" });
+      outcomes.push({ orgId: org.id, date, target, outcome: "exists" });
       continue;
     }
     try {
-      await generateDigest(db, org, clock.date, { withMissingAlerts: true });
-      outcomes.push({ orgId: org.id, date: clock.date, outcome: "generated" });
+      await generateDigest(db, org, date, { withMissingAlerts: true });
+      outcomes.push({ orgId: org.id, date, target, outcome: "generated" });
     } catch (caught) {
       const retryable = caught instanceof RetryableError;
-      outcomes.push({ orgId: org.id, date: clock.date, outcome: retryable ? "deferred" : "error", detail: errorMessage(caught) });
-      logPipeline({ step: "digest", org: org.id, date: clock.date, outcome: retryable ? "deferred" : "error", error: errorMessage(caught) });
+      outcomes.push({ orgId: org.id, date, target, outcome: retryable ? "deferred" : "error", detail: errorMessage(caught) });
+      logPipeline({ step: "digest", org: org.id, date, outcome: retryable ? "deferred" : "error", error: errorMessage(caught) });
     }
   }
   return outcomes;

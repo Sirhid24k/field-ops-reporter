@@ -6,14 +6,16 @@ import { sweepStuckReports } from "@/lib/pipeline/sweep";
 import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
- * GET /api/cron/sweep — every minute (vercel.json). Guarded by CRON_SECRET, which Vercel
- * sends as `Authorization: Bearer`. Re-queues reports stuck in a moving status for more
- * than three minutes (three strikes → failed) and processes them inline, oldest first,
- * within the function's time budget; whatever is left is still `queued` for the next run.
+ * GET /api/cron/sweep — once a day at 03:00 UTC (vercel.json), an off-peak backstop. Guarded
+ * by CRON_SECRET, which Vercel sends as `Authorization: Bearer`. Re-queues reports stuck in
+ * a moving status for more than three minutes (three strikes → failed) and processes them
+ * inline, oldest first, within the function's time budget; whatever is left is still
+ * `queued` for the next run.
  *
- * Vercel's Hobby plan only runs crons once a day. That is why /api/process also sweeps
- * on every call: with drivers sending reports, stuck ones get retried within minutes
- * anyway; on a quiet day the daily cron still catches them.
+ * Vercel Hobby only allows daily crons and fires them anywhere within the scheduled hour,
+ * so the real recovery path is the inline sweep at the top of every /api/process call: with
+ * drivers sending reports, stuck ones get retried within minutes; on a quiet day this cron
+ * still catches them.
  */
 
 export const dynamic = "force-dynamic";

@@ -15,8 +15,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
  * sweep. Returns 202 at once and runs the pipeline in `after()`; `wait: true` runs it
  * inline and returns the outcome (the harness and manual checks use that).
  *
- * The stuck-report sweep also runs here first, so on a Vercel plan without minute crons
- * every new report still gives stuck ones another go.
+ * The stuck-report sweep also runs here first: Vercel Hobby only allows daily crons, so
+ * every new report giving stuck ones another go is the real recovery path.
  */
 
 export const dynamic = "force-dynamic";

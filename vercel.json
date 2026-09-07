@@ -1,6 +1,6 @@
 {
   "crons": [
-    { "path": "/api/cron/sweep", "schedule": "* * * * *" },
-    { "path": "/api/cron/digest", "schedule": "*/15 * * * *" }
+    { "path": "/api/cron/sweep", "schedule": "0 3 * * *" },
+    { "path": "/api/cron/digest", "schedule": "30 19 * * *" }
   ]
 }

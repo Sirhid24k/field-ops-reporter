@@ -11,8 +11,8 @@ import { moveReportStatus } from "./status";
  * `queued` (its trigger never fired, or a rate limit sent it back) is restarted without
  * counting, so a rate limit is never grounds for `failed`.
  *
- * Runs from /api/cron/sweep every minute and opportunistically at the top of
- * /api/process, for plans where a minute cron is not available.
+ * Runs at the top of every /api/process call (the real recovery path: Vercel Hobby only
+ * allows daily crons) and once a day from /api/cron/sweep as a backstop.
  */
 
 export const STUCK_AFTER_MS = 3 * 60_000;
