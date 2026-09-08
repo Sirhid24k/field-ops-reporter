@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chipForRow, flagsFromValidation, pickReport, rowSummaryLine, sortRows } from "./board";
+import { chipForRow, flagsFromValidation, pickReport, routeOf, rowSummaryLine, sortRows } from "./board";
 import { shortName } from "@/lib/format";
 
 describe("board rows", () => {
@@ -43,6 +43,14 @@ describe("board rows", () => {
     expect(chipForRow({ status: "ready", openAlerts: 0 })).toEqual({ kind: "chip", status: "sent" });
     expect(chipForRow({ status: null, openAlerts: 0 })).toEqual({ kind: "chip", status: "not_reported" });
     expect(chipForRow({ status: "failed", openAlerts: 0 })).toEqual({ kind: "text", label: "Not processed" });
+  });
+
+  it("renders a route with one end missing as an arrow, not a dash", () => {
+    expect(routeOf("Kaduna", "Kano")).toBe("Kaduna → Kano");
+    expect(routeOf(null, "Alpana, Kogi State")).toBe("→ Alpana, Kogi State");
+    expect(routeOf("Kaduna", null)).toBe("Kaduna →");
+    expect(routeOf(null, null)).toBeNull();
+    expect(routeOf("  ", "Kano")).toBe("→ Kano");
   });
 
   it("writes the phone line and short names", () => {

@@ -95,8 +95,14 @@ export function chipForRow(row: Pick<ReportRowData, "status" | "openAlerts">): R
   return chip ? { kind: "chip", status: chip } : { kind: "text", label: "Not processed" };
 }
 
+/** "Kaduna → Kano"; with only one end known, "→ Kano" or "Kaduna →" rather than a dash. */
 export function routeOf(origin: string | null, destination: string | null): string | null {
-  return origin && destination ? `${origin} → ${destination}` : null;
+  const from = origin?.trim() || null;
+  const to = destination?.trim() || null;
+  if (from && to) return `${from} → ${to}`;
+  if (to) return `→ ${to}`;
+  if (from) return `${from} →`;
+  return null;
 }
 
 /** The one line under the plate on a phone: "Yusuf, Lokoja → Minna" / "Musa, 214 km" / "Sani". */

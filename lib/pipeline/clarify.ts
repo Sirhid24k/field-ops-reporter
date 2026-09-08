@@ -6,6 +6,12 @@ import { CONFIDENCE_FLOOR } from "./validate";
  * model was not sure of it, ask the driver, once. A report that already has an answered
  * clarification goes to `ready` with its gaps visible; it is never asked again.
  *
+ * Two things earn a question: a required field of a completed trip that is missing or
+ * scored below the confidence floor, and a number the driver did say but that could not be
+ * read (scored above zero and below the floor: a garbled odometer, litres split by the
+ * speech-to-text), whatever the trip status. Absent numbers on a trip still in progress are
+ * not asked about; the driver has not reached the end yet.
+ *
  * The decision is code; the model only supplies the wording of the questions.
  */
 
@@ -34,13 +40,26 @@ function isBlank(value: unknown): boolean {
   return value === null || value === undefined || (typeof value === "string" && value.trim() === "");
 }
 
-/** Required fields that are absent, or present with confidence below CONFIDENCE_FLOOR. */
-export function missingRequiredFields(extraction: Extraction): RequiredField[] {
-  if (extraction.trip_status !== "completed") return [];
+/** The numbers the driver may have said unclearly; an unclear one is worth a question on any trip. */
+const NUMBER_FIELDS: readonly RequiredField[] = ["odometer_end", "fuel_liters"];
 
-  const required = new Set<RequiredField>(["odometer_end", "destination", "origin"]);
-  // "fuel_liters (if fuel was bought)": a cost without litres, or the model saying litres are missing
-  if (extraction.fuel_cost_ngn !== null || extraction.missing_fields.includes("fuel_liters")) required.add("fuel_liters");
+/** Scored, but below the floor: the driver said it and it could not be read (0 means absent). */
+export function isUnclear(extraction: Extraction, field: RequiredField): boolean {
+  const confidence = extraction.confidence[field];
+  return typeof confidence === "number" && confidence > 0 && confidence < CONFIDENCE_FLOOR;
+}
+
+/** Fields worth a question: required ones that are absent or below CONFIDENCE_FLOOR, and unclear numbers. */
+export function missingRequiredFields(extraction: Extraction): RequiredField[] {
+  const required = new Set<RequiredField>();
+  if (extraction.trip_status === "completed") {
+    for (const field of ["odometer_end", "destination", "origin"] as const) required.add(field);
+    // "fuel_liters (if fuel was bought)": a cost or a price without litres, or the model saying litres are missing
+    if (extraction.fuel_cost_ngn !== null || extraction.fuel_price_per_l_ngn !== null || extraction.missing_fields.includes("fuel_liters")) {
+      required.add("fuel_liters");
+    }
+  }
+  for (const field of NUMBER_FIELDS) if (isUnclear(extraction, field)) required.add(field);
 
   return REQUIRED_PRIORITY.filter((field) => {
     if (!required.has(field)) return false;

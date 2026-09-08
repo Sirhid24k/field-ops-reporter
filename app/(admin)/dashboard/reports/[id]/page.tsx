@@ -20,6 +20,7 @@ import {
 import { requireStaff } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { dateInZone, formatClock, formatDateTime, formatDayShort } from "@/lib/dates";
+import { formatGrouped } from "@/lib/format";
 import { isMoving } from "@/lib/report-status";
 
 export const metadata: Metadata = { title: "Report" };
@@ -75,6 +76,12 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   const notes = typeof extracted?.notes === "string" ? extracted.notes : null;
   const canEdit = EDITABLE_STATUSES.has(report.status);
   const startFromLastReading = extracted !== null && extracted.odometer_start === null && report.odometer_start !== null && !edited.has("odometer_start");
+  // the pipeline multiplies litres by the quoted price per litre when the driver gave no total
+  const pricePerLitre = typeof extracted?.fuel_price_per_l_ngn === "number" ? extracted.fuel_price_per_l_ngn : null;
+  const costFromPrice =
+    pricePerLitre !== null && extracted?.fuel_cost_ngn === null && report.fuel_cost_ngn !== null && report.fuel_liters !== null && !edited.has("fuel_cost_ngn")
+      ? `${formatFieldValue("fuel_liters", report.fuel_liters)} × ₦${formatGrouped(pricePerLitre)} per litre`
+      : null;
 
   const route =
     report.origin && report.destination ? `${report.origin} → ${report.destination}` : report.origin ? `From ${report.origin}` : report.destination ? `To ${report.destination}` : null;
@@ -147,6 +154,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
       numeric: true,
       flagged: flagged.has("fuel_cost_ngn"),
       edited: edited.has("fuel_cost_ngn"),
+      note: costFromPrice,
     },
     {
       key: "load",
