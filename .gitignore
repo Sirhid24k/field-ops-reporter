@@ -27,3 +27,8 @@ next-env.d.ts
 # kept from the original repo
 /docs
 /design
+
+.vercel
+.env*
+!.env.example
+

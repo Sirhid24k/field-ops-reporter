@@ -7,6 +7,8 @@ export type FormState =
       fieldErrors?: Record<string, string>;
       /** What was submitted, so the form can keep it after an error (React resets forms after an action). */
       values?: Record<string, string>;
+      /** The action finished (a drawer can close, a "Saved" note can show). */
+      done?: boolean;
     }
   | undefined;
 
