@@ -8,7 +8,7 @@ import { inviteMessage, inviteUrl, whatsappShareUrl } from "@/lib/invites";
 import { getRequestOrigin } from "@/lib/request-origin";
 import { isStaff } from "@/lib/roles";
 import { generateInvite, skipVehicle } from "./actions";
-import { CopyLinkButton } from "./CopyLinkButton";
+import { CopyLinkButton } from "@/components/CopyLinkButton";
 import { AddVehicleForm, CreateOrgForm } from "./forms";
 
 export const metadata: Metadata = { title: "Set up" };

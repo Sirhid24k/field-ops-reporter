@@ -73,15 +73,15 @@ export async function getInviteByCode(code: string): Promise<InviteLookup | null
 }
 
 /**
- * Finds an unused, unexpired field invite for the org or creates one.
- * Runs as the admin (staff policy on `invites`).
+ * Finds an unused, unexpired invite for the org and role or creates one, so the same link
+ * stays valid until someone uses it. Runs as the admin (staff policy on `invites`).
  */
-export async function ensureFieldInvite(supabase: SupabaseClient<Database>, orgId: string) {
+export async function ensureInvite(supabase: SupabaseClient<Database>, orgId: string, role: UserRole) {
   const { data: existing } = await supabase
     .from("invites")
     .select("id, code, role, expires_at")
     .eq("org_id", orgId)
-    .eq("role", "field")
+    .eq("role", role)
     .is("used_by", null)
     .gt("expires_at", new Date().toISOString())
     .order("created_at", { ascending: false })
@@ -92,11 +92,16 @@ export async function ensureFieldInvite(supabase: SupabaseClient<Database>, orgI
   const expiresAt = new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000).toISOString();
   const { data: created, error } = await supabase
     .from("invites")
-    .insert({ org_id: orgId, role: "field", code: generateInviteCode(), expires_at: expiresAt })
+    .insert({ org_id: orgId, role, code: generateInviteCode(), expires_at: expiresAt })
     .select("id, code, role, expires_at")
     .single();
   if (error || !created) throw new Error(error?.message ?? "Could not create the invite.");
   return created;
+}
+
+/** The onboarding step 3 invite: role fixed to driver. */
+export function ensureFieldInvite(supabase: SupabaseClient<Database>, orgId: string) {
+  return ensureInvite(supabase, orgId, "field");
 }
 
 export type CompleteJoinResult =
