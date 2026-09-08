@@ -1,5 +1,6 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireStaff } from "@/lib/auth";
 import { cutoffMinutes, generateDigest, localClock, type DigestStats } from "@/lib/pipeline/digest";
@@ -8,7 +9,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 
 /**
  * On-demand digest generation (M18 "Regenerate" / "Generate now"): the same lib the cron
- * uses. Staff only; the org is the caller's. Session 4 wires the button.
+ * uses. Staff only; the org is the caller's. The digest page's buttons call it.
  */
 
 export type GenerateDigestResult =
@@ -34,6 +35,7 @@ export async function generateDigestNow(rawInput: unknown = {}): Promise<Generat
 
   try {
     const result = await generateDigest(createAdminClient(), organization, date, { withMissingAlerts: pastCutoff });
+    revalidatePath("/dashboard", "layout");
     return { ok: true, date, stats: result.data.stats, content_md: result.content_md, source: result.source };
   } catch (error) {
     if (error instanceof RetryableError) return { ok: false, message: "The writing model is busy. Try again in a minute." };
