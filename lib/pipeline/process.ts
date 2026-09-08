@@ -210,8 +210,15 @@ async function extractStep(db: PipelineDb, report: LoadedReport, vehicle: Vehicl
   return extraction;
 }
 
-/** Replaces the report's open alerts with the current set; acknowledged ones are kept and not re-raised. */
-async function replaceAlerts(db: PipelineDb, report: LoadedReport, drafts: AlertDraft[]): Promise<number> {
+/**
+ * Replaces the report's open alerts with the current set; acknowledged ones are kept and not
+ * re-raised. Also used by lib/pipeline/recheck.ts after a supervisor edits a field.
+ */
+export async function replaceAlerts(
+  db: PipelineDb,
+  report: Pick<LoadedReport, "id" | "org_id" | "vehicle_id">,
+  drafts: AlertDraft[],
+): Promise<number> {
   const { data: existing, error } = await db.from("alerts").select("id, type, status").eq("report_id", report.id);
   if (error) throw new Error(`Could not read alerts for ${report.id}: ${error.message}`);
   const acknowledged = new Set((existing ?? []).filter((alert) => alert.status === "acknowledged").map((alert) => alert.type));
