@@ -8,7 +8,8 @@ import { logPipeline, timer } from "./log";
 import { moveReportStatus, type ReportStatus } from "./status";
 import { mimeForPath, transcribe } from "./stt";
 import { summarize } from "./summary";
-import { validateReport, type AlertDraft, type ValidationInput } from "./validate";
+import { MAX_REQUEUES } from "./sweep";
+import { deriveFuelCost, validateReport, type AlertDraft, type ValidationInput } from "./validate";
 
 /**
  * The processing state machine (spec §5):
@@ -20,15 +21,24 @@ import { validateReport, type AlertDraft, type ValidationInput } from "./validat
  * is persisted before the next transition, so a crash leaves a report that the sweep can
  * re-queue and a re-run can pick up without repeating paid work (a transcript is reused).
  *
- * Failures: RetryableError → back to `queued`, nothing counted, the sweep re-runs it;
- * anything else → `failed` with the message in `error`.
+ * Failures never leave a report in a moving status. A step that still fails after its
+ * in-run retries (lib/pipeline/retry.ts), or that runs out of the invocation's time budget
+ * (`deadlineAt`), puts the report back to `queued` with `requeue_count + 1` and a fresh
+ * `status_changed_at`; the caller fires one more /api/process for it. After MAX_REQUEUES
+ * such requeues the next failure marks it `failed`. An UnrecoverableError (silent audio, a
+ * schema the model could not satisfy twice, bad configuration) is `failed` at once.
  */
 
 export type ProcessOutcome =
   | { outcome: "processed"; status: "ready" | "needs_clarification"; questions: string[]; alerts: number }
   | { outcome: "skipped"; reason: string }
-  | { outcome: "deferred"; reason: string }
+  | { outcome: "requeued"; reason: string; requeueCount: number }
   | { outcome: "failed"; error: string };
+
+export type ProcessOptions = {
+  /** Epoch milliseconds after which nothing may still be running: the function's time budget. */
+  deadlineAt?: number | null;
+};
 
 const REPORT_SELECT =
   "*, vehicles(id, plate_number, label, current_odometer), organizations(id, name, timezone, fuel_baseline_km_per_l)";
@@ -44,7 +54,7 @@ type Vehicle = NonNullable<LoadedReport["vehicles"]>;
 type Organization = NonNullable<LoadedReport["organizations"]>;
 
 /** Thrown when a compare-and-set loses: another worker or the sweep owns the report now. */
-class LostClaimError extends Error {
+export class LostClaimError extends Error {
   constructor(step: ReportStatus) {
     super(`lost the claim at ${step}`);
     this.name = "LostClaimError";
@@ -59,6 +69,8 @@ type Heard = {
   answeredRounds: number;
 };
 
+type Run = { reportId: string; deadlineAt: number | null; steps: Record<string, number> };
+
 function now(): string {
   return new Date().toISOString();
 }
@@ -68,7 +80,8 @@ async function persist(db: PipelineDb, reportId: string, patch: TablesUpdate<"re
   if (error) throw new Error(`Could not save report ${reportId}: ${error.message}`);
 }
 
-async function downloadAudio(db: PipelineDb, path: string): Promise<Buffer> {
+async function downloadAudio(db: PipelineDb, run: Run, path: string): Promise<Buffer> {
+  const elapsed = timer();
   const { data, error } = await db.storage.from(REPORT_AUDIO_BUCKET).download(path);
   if (error || !data) {
     const status = error && typeof error === "object" && "status" in error ? Number((error as { status?: unknown }).status) : NaN;
@@ -76,7 +89,11 @@ async function downloadAudio(db: PipelineDb, path: string): Promise<Buffer> {
     if (status === 400 || status === 404) throw new UnrecoverableError(message, { cause: error });
     throw new RetryableError(message, { cause: error });
   }
-  return Buffer.from(await data.arrayBuffer());
+  const bytes = Buffer.from(await data.arrayBuffer());
+  const ms = elapsed();
+  run.steps.download = (run.steps.download ?? 0) + ms;
+  logPipeline({ step: "download", reportId: run.reportId, outcome: "ok", ms, bytes: bytes.length });
+  return bytes;
 }
 
 // ---------------------------------------------------------------------------
@@ -84,8 +101,9 @@ async function downloadAudio(db: PipelineDb, path: string): Promise<Buffer> {
 // ---------------------------------------------------------------------------
 
 /** STT for the report (skipped for text reports and reused on a re-run) and for any voice answers. */
-async function transcribeStep(db: PipelineDb, report: LoadedReport): Promise<Heard> {
+async function transcribeStep(db: PipelineDb, run: Run, report: LoadedReport): Promise<Heard> {
   const elapsed = timer();
+  const sttOptions = { deadlineAt: run.deadlineAt, reportId: report.id };
   let transcript: string;
   let language: string | null;
   let reused = false;
@@ -100,7 +118,7 @@ async function transcribeStep(db: PipelineDb, report: LoadedReport): Promise<Hea
     reused = true;
   } else {
     const path = report.audio_path as string; // checked before the claim
-    const heard = await transcribe(await downloadAudio(db, path), mimeForPath(path));
+    const heard = await transcribe(await downloadAudio(db, run, path), mimeForPath(path), sttOptions);
     transcript = heard.text;
     language = heard.language;
     await persist(db, report.id, { transcript, transcript_language: language });
@@ -126,7 +144,7 @@ async function transcribeStep(db: PipelineDb, report: LoadedReport): Promise<Hea
     if (!row.answered_at) continue;
     let answerTranscript = row.answer_transcript;
     if (row.answer_audio_path && answerTranscript === null) {
-      const heard = await transcribe(await downloadAudio(db, row.answer_audio_path), mimeForPath(row.answer_audio_path));
+      const heard = await transcribe(await downloadAudio(db, run, row.answer_audio_path), mimeForPath(row.answer_audio_path), sttOptions);
       answerTranscript = heard.text;
       const { error: saveError } = await db.from("clarifications").update({ answer_transcript: answerTranscript }).eq("id", row.id);
       if (saveError) throw new Error(`Could not save the answer transcript for ${row.id}: ${saveError.message}`);
@@ -136,11 +154,12 @@ async function transcribeStep(db: PipelineDb, report: LoadedReport): Promise<Hea
   }
   const answeredRounds = new Set((rows ?? []).map((row) => row.answered_at).filter(Boolean)).size;
 
+  run.steps.transcribe = elapsed();
   logPipeline({
     step: "transcribe",
     reportId: report.id,
     outcome: "ok",
-    ms: elapsed(),
+    ms: run.steps.transcribe,
     source: report.source,
     reused,
     language,
@@ -151,7 +170,7 @@ async function transcribeStep(db: PipelineDb, report: LoadedReport): Promise<Hea
 }
 
 /** Gemini structured extraction; writes `extracted`, `confidence`, the promoted columns and the summary. */
-async function extractStep(db: PipelineDb, report: LoadedReport, vehicle: Vehicle, org: Organization, heard: Heard): Promise<Extraction> {
+async function extractStep(db: PipelineDb, run: Run, report: LoadedReport, vehicle: Vehicle, org: Organization, heard: Heard): Promise<Extraction> {
   const elapsed = timer();
   const context: ExtractionContext = {
     transcript: heard.transcript,
@@ -164,7 +183,7 @@ async function extractStep(db: PipelineDb, report: LoadedReport, vehicle: Vehicl
     fuelBaselineKmPerL: org.fuel_baseline_km_per_l,
     thread: heard.thread,
   };
-  const extraction = await extractReport(context);
+  const extraction = await extractReport(context, { deadlineAt: run.deadlineAt, reportId: report.id });
   const promoted = promotedColumns(extraction);
 
   // A driver usually gives one reading. The vehicle's last approved reading is, by
@@ -191,21 +210,23 @@ async function extractStep(db: PipelineDb, report: LoadedReport, vehicle: Vehicl
       odometerStart: promoted.odometer_start,
       odometerEnd: extraction.odometer_end,
       fuelLiters: extraction.fuel_liters,
-      fuelCostNgn: extraction.fuel_cost_ngn,
+      fuelCostNgn: promoted.fuel_cost_ngn,
       loadType: extraction.load_type,
       loadTonnage: extraction.load_tonnage,
       incidents: extraction.incidents,
     }),
   });
 
+  run.steps.extract = elapsed();
   logPipeline({
     step: "extract",
     reportId: report.id,
     outcome: "ok",
-    ms: elapsed(),
+    ms: run.steps.extract,
     tripStatus: extraction.trip_status,
     missing: extraction.missing_fields,
     incidents: extraction.incidents.length,
+    fuelCostDerived: extraction.fuel_cost_ngn === null && promoted.fuel_cost_ngn !== null,
   });
   return extraction;
 }
@@ -246,6 +267,7 @@ export async function replaceAlerts(
 /** Deterministic checks, alerts, then the clarification decision and the final status. */
 async function validateStep(
   db: PipelineDb,
+  run: Run,
   report: LoadedReport,
   vehicle: Vehicle,
   org: Organization,
@@ -279,7 +301,11 @@ async function validateStep(
     odometerStart: extraction.odometer_start,
     odometerEnd: extraction.odometer_end,
     fuelLiters: extraction.fuel_liters,
-    fuelCostNgn: extraction.fuel_cost_ngn,
+    fuelCostNgn: deriveFuelCost({
+      fuelLiters: extraction.fuel_liters,
+      fuelCostNgn: extraction.fuel_cost_ngn,
+      fuelPricePerLNgn: extraction.fuel_price_per_l_ngn,
+    }),
     loadTonnage: extraction.load_tonnage,
     incidents: extraction.incidents,
     lastOdometer: vehicle.current_odometer,
@@ -302,14 +328,16 @@ async function validateStep(
     if (!(await moveReportStatus(db, report.id, "validating", "needs_clarification", { processed_at: now(), error: null }))) {
       throw new LostClaimError("validating");
     }
-    logPipeline({ step: "validate", reportId: report.id, outcome: "needs_clarification", ms: elapsed(), failedRules, alerts, missing: decision.missing });
+    run.steps.validate = elapsed();
+    logPipeline({ step: "validate", reportId: report.id, outcome: "needs_clarification", ms: run.steps.validate, failedRules, alerts, missing: decision.missing });
     return { outcome: "processed", status: "needs_clarification", questions: decision.questions, alerts };
   }
 
   if (!(await moveReportStatus(db, report.id, "validating", "ready", { processed_at: now(), error: null }))) {
     throw new LostClaimError("validating");
   }
-  logPipeline({ step: "validate", reportId: report.id, outcome: "ready", ms: elapsed(), failedRules, alerts, missing: decision.missing, answeredRounds });
+  run.steps.validate = elapsed();
+  logPipeline({ step: "validate", reportId: report.id, outcome: "ready", ms: run.steps.validate, failedRules, alerts, missing: decision.missing, answeredRounds });
   return { outcome: "processed", status: "ready", questions: [], alerts };
 }
 
@@ -318,34 +346,81 @@ async function advance(db: PipelineDb, reportId: string, from: ReportStatus, to:
   return to;
 }
 
-async function settle(db: PipelineDb, reportId: string, step: ReportStatus, error: unknown, ms: number): Promise<ProcessOutcome> {
-  if (error instanceof LostClaimError) {
-    logPipeline({ step: "process", reportId, outcome: "skipped", reason: error.message, ms });
-    return { outcome: "skipped", reason: error.message };
+// ---------------------------------------------------------------------------
+// settlement: what happens to a report whose run threw
+// ---------------------------------------------------------------------------
+
+export type Settlement =
+  | { action: "skip"; reason: string }
+  | { action: "requeue"; requeueCount: number; reason: string }
+  | { action: "fail"; message: string };
+
+/**
+ * Pure. A lost claim is somebody else's report now. An UnrecoverableError fails at once. A
+ * RetryableError (retries exhausted, or the run's deadline reached) and anything unexpected
+ * (a database hiccup, a bug) go back to `queued` with `requeue_count + 1`, unless the report
+ * has already been requeued MAX_REQUEUES times, in which case it fails with the reason.
+ */
+export function decideSettlement(error: unknown, step: ReportStatus, requeueCount: number): Settlement {
+  if (error instanceof LostClaimError) return { action: "skip", reason: error.message };
+  if (error instanceof UnrecoverableError) return { action: "fail", message: error.message.slice(0, 1_000) };
+
+  const reason = (error instanceof RetryableError ? error.message : `Processing failed at ${step}: ${errorMessage(error)}`).slice(0, 1_000);
+  if (requeueCount >= MAX_REQUEUES) {
+    return { action: "fail", message: `Processing did not finish after ${MAX_REQUEUES} retries (stuck at ${step}): ${reason}`.slice(0, 1_000) };
   }
-  if (error instanceof RetryableError) {
-    await moveReportStatus(db, reportId, step, "queued", { error: error.message, processed_at: null });
-    logPipeline({ step: "process", reportId, outcome: "deferred", at: step, reason: error.message, ms });
-    return { outcome: "deferred", reason: error.message };
+  return { action: "requeue", requeueCount: requeueCount + 1, reason };
+}
+
+async function settle(db: PipelineDb, run: Run, report: LoadedReport, step: ReportStatus, error: unknown, ms: number): Promise<ProcessOutcome> {
+  const settlement = decideSettlement(error, step, report.requeue_count);
+  const budgetLeftMs = run.deadlineAt === null ? null : run.deadlineAt - Date.now();
+
+  if (settlement.action === "skip") {
+    logPipeline({ step: "process", reportId: report.id, outcome: "skipped", reason: settlement.reason, ms, steps: run.steps });
+    return { outcome: "skipped", reason: settlement.reason };
   }
-  const message = (error instanceof UnrecoverableError ? error.message : `Processing failed at ${step}: ${errorMessage(error)}`).slice(0, 1_000);
-  await moveReportStatus(db, reportId, step, "failed", { error: message, processed_at: now() });
-  logPipeline({ step: "process", reportId, outcome: "failed", at: step, error: message, ms });
-  return { outcome: "failed", error: message };
+
+  if (settlement.action === "requeue") {
+    const moved = await moveReportStatus(db, report.id, step, "queued", {
+      requeue_count: settlement.requeueCount,
+      status_changed_at: now(),
+      error: settlement.reason,
+      processed_at: null,
+    });
+    logPipeline({
+      step: "process",
+      reportId: report.id,
+      outcome: moved ? "requeued" : "requeue_lost",
+      at: step,
+      requeueCount: settlement.requeueCount,
+      reason: settlement.reason,
+      ms,
+      steps: run.steps,
+      budgetLeftMs,
+    });
+    return { outcome: "requeued", reason: settlement.reason, requeueCount: settlement.requeueCount };
+  }
+
+  await moveReportStatus(db, report.id, step, "failed", { error: settlement.message, processed_at: now() });
+  logPipeline({ step: "process", reportId: report.id, outcome: "failed", at: step, error: settlement.message, ms, steps: run.steps, budgetLeftMs });
+  return { outcome: "failed", error: settlement.message };
 }
 
 // ---------------------------------------------------------------------------
 // entry point
 // ---------------------------------------------------------------------------
 
-export async function processReport(db: PipelineDb, reportId: string): Promise<ProcessOutcome> {
+export async function processReport(db: PipelineDb, reportId: string, options: ProcessOptions = {}): Promise<ProcessOutcome> {
   const elapsed = timer();
+  const run: Run = { reportId, deadlineAt: options.deadlineAt ?? null, steps: {} };
   const skip = (reason: string): ProcessOutcome => {
     logPipeline({ step: "process", reportId, outcome: "skipped", reason, ms: elapsed() });
     return { outcome: "skipped", reason };
   };
 
   const report = await loadReport(db, reportId);
+  run.steps.load = elapsed();
   if (!report) return skip("report not found");
   if (report.status !== "queued") return skip(`status is ${report.status}`);
   if (report.source === "voice" && !report.audio_path) return skip("audio not uploaded yet");
@@ -362,18 +437,32 @@ export async function processReport(db: PipelineDb, reportId: string): Promise<P
   if (!(await moveReportStatus(db, reportId, "queued", "transcribing", { error: null, processed_at: null }))) {
     return skip("claimed by another worker");
   }
-  logPipeline({ step: "claim", reportId, outcome: "ok", source: report.source, requeueCount: report.requeue_count });
+  logPipeline({
+    step: "claim",
+    reportId,
+    outcome: "ok",
+    source: report.source,
+    requeueCount: report.requeue_count,
+    budgetMs: run.deadlineAt === null ? null : run.deadlineAt - Date.now(),
+  });
 
   let step: ReportStatus = "transcribing";
   try {
-    const heard = await transcribeStep(db, report);
+    const heard = await transcribeStep(db, run, report);
     step = await advance(db, reportId, "transcribing", "extracting");
-    const extraction = await extractStep(db, report, vehicle, org, heard);
+    const extraction = await extractStep(db, run, report, vehicle, org, heard);
     step = await advance(db, reportId, "extracting", "validating");
-    const result = await validateStep(db, report, vehicle, org, extraction, heard.answeredRounds);
-    logPipeline({ step: "process", reportId, outcome: result.status, ms: elapsed() });
+    const result = await validateStep(db, run, report, vehicle, org, extraction, heard.answeredRounds);
+    logPipeline({
+      step: "process",
+      reportId,
+      outcome: result.status,
+      ms: elapsed(),
+      steps: run.steps,
+      budgetLeftMs: run.deadlineAt === null ? null : run.deadlineAt - Date.now(),
+    });
     return result;
   } catch (error) {
-    return settle(db, reportId, step, error, elapsed());
+    return settle(db, run, report, step, error, elapsed());
   }
 }

@@ -124,6 +124,18 @@ export function distanceForChecks(input: ValidationInput): number | null {
   return null;
 }
 
+/**
+ * The fuel cost to promote: the total the driver stated, otherwise litres × the per-litre
+ * price when the driver quoted both ("450 litres at 1,760"), rounded to the naira. Drivers
+ * usually quote the price per litre; the multiplication is done here, never by the model.
+ */
+export function deriveFuelCost(input: { fuelLiters: number | null; fuelCostNgn: number | null; fuelPricePerLNgn: number | null }): number | null {
+  if (input.fuelCostNgn !== null) return input.fuelCostNgn;
+  if (input.fuelLiters === null || input.fuelPricePerLNgn === null) return null;
+  if (!(input.fuelLiters > 0) || !(input.fuelPricePerLNgn > 0)) return null;
+  return Math.round(input.fuelLiters * input.fuelPricePerLNgn);
+}
+
 // ---------------------------------------------------------------------------
 // rules
 // ---------------------------------------------------------------------------

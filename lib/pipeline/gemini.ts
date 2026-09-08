@@ -5,9 +5,16 @@ import { errorMessage, isRetryableStatus, ModelOutputError, RetryableError, Unre
  * The only place that talks to Gemini. Two callers: extraction (structured JSON) and the
  * digest (markdown). Model IDs come from EXTRACTION_MODEL / DIGEST_MODEL; the default
  * matches .env.example and is never used in a call site.
+ *
+ * One call here is one HTTP request: the SDK's own retry loop is switched off so that
+ * lib/pipeline/retry.ts decides when to try again, with a backoff that is logged and a
+ * deadline that respects the function's time budget. A 429 or 5xx surfaces as a
+ * RetryableError; the caller retries it or requeues the report.
  */
 
 const DEFAULT_MODEL = "gemini-3.5-flash";
+/** One attempt; extraction passes a tighter `timeoutMs` sized to the run's remaining budget. */
+export const DEFAULT_TIMEOUT_MS = 60_000;
 
 let client: GoogleGenAI | null = null;
 
@@ -17,12 +24,7 @@ function gemini(): GoogleGenAI {
     if (!apiKey) throw new UnrecoverableError("Missing environment variable GEMINI_API_KEY (server-only).");
     client = new GoogleGenAI({
       apiKey,
-      httpOptions: {
-        timeout: 60_000,
-        // A few quick in-process retries cover a blip; a real quota hit still comes back as a
-        // 429, which becomes a RetryableError and the sweep re-runs the report minutes later.
-        retryOptions: { attempts: 3, initialDelay: 2, maxDelay: 6, httpStatusCodes: [408, 429, 500, 502, 503, 504] },
-      },
+      httpOptions: { timeout: DEFAULT_TIMEOUT_MS, retryOptions: { attempts: 1 } },
     });
   }
   return client;
@@ -40,6 +42,8 @@ export type GenerateOptions = {
   /** Structured output: `responseMimeType: "application/json"` plus this `responseSchema`. */
   schema?: Schema;
   temperature?: number;
+  /** Timeout for this one attempt (default DEFAULT_TIMEOUT_MS). */
+  timeoutMs?: number;
 };
 
 /** One generateContent call; the model's text, or a typed error the pipeline knows how to route. */
@@ -52,6 +56,7 @@ export async function generateText(options: GenerateOptions): Promise<string> {
       config: {
         systemInstruction: options.system,
         temperature: options.temperature ?? 0.2,
+        httpOptions: { timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS, retryOptions: { attempts: 1 } },
         ...(options.schema ? { responseMimeType: "application/json", responseSchema: options.schema } : {}),
       },
     });
@@ -84,6 +89,6 @@ function translate(error: unknown, model: string): Error {
     }
     return new UnrecoverableError(`Gemini ${model} rejected the request (${error.status}): ${error.message}`, { cause: error });
   }
-  // fetch failures and aborted timeouts: worth another go later
+  // fetch failures and aborted timeouts: worth another go
   return new RetryableError(`Could not reach Gemini: ${errorMessage(error)}`, { cause: error });
 }

@@ -8,8 +8,9 @@
  *                      model could not satisfy twice, bad configuration). The report is
  *                      marked `failed` with the message in `error`.
  *
- * Anything else that is thrown is treated as retryable once by the sweep's bounded
- * re-queue, which is what "survives crashes and re-runs" means in practice.
+ * Anything else that is thrown (a database hiccup, a bug) is requeued like a RetryableError,
+ * bounded by the same three-strike rule (lib/pipeline/process.ts `decideSettlement`), which
+ * is what "survives crashes and re-runs" means in practice.
  */
 
 export class RetryableError extends Error {

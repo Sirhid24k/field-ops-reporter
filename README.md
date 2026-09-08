@@ -57,9 +57,11 @@ link; and add `http://localhost:3000/**` plus your deployed origin `/**` under A
   `manifest.ts` is the web app manifest.
 - `lib/pipeline/` — the processing pipeline: `process.ts` (state machine, compare-and-set on status),
   `stt.ts` (Groq Whisper adapter + language labels), `extract.ts` (Gemini structured output, spec §6),
-  `validate.ts` (the deterministic rules and every threshold; `validate.test.ts`), `clarify.ts` (one round of
-  driver questions), `digest.ts` (stats from the rows, markdown from the model), `sweep.ts` (stuck-report
-  re-queue with bounded retries), `internal.ts` (CRON_SECRET guard and the fire-and-forget trigger).
+  `validate.ts` (the deterministic rules and every threshold, the fuel cost from litres × price; `validate.test.ts`),
+  `clarify.ts` (one round of driver questions), `digest.ts` (stats from the rows, markdown from the model),
+  `retry.ts` (in-run retries with backoff inside the function's deadline), `recheck.ts` (the checks again after a
+  dashboard edit), `sweep.ts` (stuck-report re-queue with bounded retries), `internal.ts` (CRON_SECRET guard and
+  the fire-and-forget trigger). `docs/pipeline-resilience-notes.md` explains the time budget on Vercel.
 - `components/ui/` — the design-system primitives (Button, StatusChip, OdometerDigits, Input, Select,
   Textarea, ProgressLine, Sheet, Drawer). `components/field/` — the driver screens' parts (record control,
   Today card, forms, the offline shell).

@@ -1,4 +1,5 @@
 import { errorMessage, isRetryableStatus, RetryableError, UnrecoverableError } from "./errors";
+import { attemptTimeoutMs, withRetries } from "./retry";
 
 /**
  * Speech-to-text adapter. `STT_PROVIDER` picks the provider; only Groq (Whisper large v3,
@@ -13,9 +14,14 @@ import { errorMessage, isRetryableStatus, RetryableError, UnrecoverableError } f
 export type RawTranscription = { text: string; language: string | null };
 export type Transcription = { text: string; language: string };
 
+export type ProviderCall = {
+  /** Timeout for this one attempt; sized to the run's remaining budget by `transcribe`. */
+  timeoutMs: number;
+};
+
 export interface SttProvider {
   readonly name: string;
-  transcribe(audio: Buffer, mime: string): Promise<RawTranscription>;
+  transcribe(audio: Buffer, mime: string, call: ProviderCall): Promise<RawTranscription>;
 }
 
 // ---------------------------------------------------------------------------
@@ -24,7 +30,8 @@ export interface SttProvider {
 
 const GROQ_TRANSCRIPTIONS_URL = "https://api.groq.com/openai/v1/audio/transcriptions";
 const DEFAULT_GROQ_MODEL = "whisper-large-v3";
-const REQUEST_TIMEOUT_MS = 90_000;
+/** One attempt on a three-minute clip finishes well inside this; the run's deadline can shorten it. */
+export const REQUEST_TIMEOUT_MS = 45_000;
 
 /**
  * Whisper's `prompt` is a style guide (max 224 tokens): it steers spellings of place names
@@ -48,7 +55,7 @@ function retryAfterMs(response: Response): number | null {
 
 const groq: SttProvider = {
   name: "groq",
-  async transcribe(audio, mime) {
+  async transcribe(audio, mime, call) {
     const apiKey = process.env.STT_API_KEY || process.env.GROQ_API_KEY;
     if (!apiKey) throw new UnrecoverableError("Missing environment variable STT_API_KEY (server-only).");
     const model = process.env.STT_MODEL?.trim() || DEFAULT_GROQ_MODEL;
@@ -66,7 +73,7 @@ const groq: SttProvider = {
         method: "POST",
         headers: { authorization: `Bearer ${apiKey}` },
         body: form,
-        signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+        signal: AbortSignal.timeout(call.timeoutMs),
       });
     } catch (error) {
       throw new RetryableError(`Could not reach Groq: ${errorMessage(error)}`, { cause: error });
@@ -181,7 +188,22 @@ export function languageLabel(providerLanguage: string | null, text: string): st
 // entry point
 // ---------------------------------------------------------------------------
 
-export async function transcribe(audio: Buffer, mime: string): Promise<Transcription> {
-  const raw = await sttProvider().transcribe(audio, mime);
+export type TranscribeOptions = {
+  /** Epoch milliseconds after which nothing may still be running (the function's budget). */
+  deadlineAt?: number | null;
+  reportId?: string;
+};
+
+/**
+ * One transcription with retries inside the run (lib/pipeline/retry.ts): a 429, a 5xx, a
+ * dropped connection or a timed-out attempt is tried again after 5–10 s, up to three
+ * attempts, never past the deadline.
+ */
+export async function transcribe(audio: Buffer, mime: string, options: TranscribeOptions = {}): Promise<Transcription> {
+  const provider = sttProvider();
+  const raw = await withRetries(
+    (attempt) => provider.transcribe(audio, mime, { timeoutMs: attemptTimeoutMs(REQUEST_TIMEOUT_MS, attempt.remainingMs) }),
+    { label: "stt", reportId: options.reportId, deadlineAt: options.deadlineAt },
+  );
   return { text: raw.text, language: languageLabel(raw.language, raw.text) };
 }
