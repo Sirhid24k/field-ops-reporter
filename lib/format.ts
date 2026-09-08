@@ -33,3 +33,16 @@ export function formatTime12h(time: string): string {
 export function firstName(fullName: string): string {
   return fullName.trim().split(/\s+/)[0] ?? fullName;
 }
+
+/** "Musa Abdullahi" → "Musa A.", the way the board shortens a driver's name. One word stays as it is. */
+export function shortName(fullName: string): string {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return parts[0] ?? fullName;
+  return `${parts[0]} ${parts[parts.length - 1][0].toUpperCase()}.`;
+}
+
+/** "in_progress" → "In progress": enum values as sentence-case words. */
+export function humanize(value: string): string {
+  const words = value.replace(/[_-]+/g, " ").trim();
+  return words ? words[0].toUpperCase() + words.slice(1) : value;
+}

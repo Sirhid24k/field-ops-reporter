@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
@@ -29,9 +30,9 @@ export function PageHeader({
 /** Text tabs (Open / Acknowledged, Vehicles / People): the active one in ink with a 2px underline. */
 export function Tabs({ label, items }: { label: string; items: ReadonlyArray<{ href: string; label: string; active: boolean; count?: number }> }) {
   return (
-    <nav aria-label={label} className="flex gap-5 font-display text-body-lg font-semibold">
+    <nav aria-label={label} className="flex flex-wrap gap-x-5 font-display text-body-lg font-semibold">
       {items.map((item) => (
-        <a
+        <Link
           key={item.href}
           href={item.href}
           aria-current={item.active ? "page" : undefined}
@@ -42,7 +43,7 @@ export function Tabs({ label, items }: { label: string; items: ReadonlyArray<{ h
         >
           {item.label}
           {item.count !== undefined ? <span className="tabular">{item.count}</span> : null}
-        </a>
+        </Link>
       ))}
     </nav>
   );

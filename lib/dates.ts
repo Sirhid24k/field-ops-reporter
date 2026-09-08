@@ -97,3 +97,26 @@ export function formatClock(timestamp: string | Date, timeZone: string): string 
     return "";
   }
 }
+
+/** True for a YYYY-MM-DD string that is a real calendar date. */
+export function isIsoDate(value: unknown): value is string {
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
+}
+
+/** YYYY-MM-DD plus `days` (negative to go back). */
+export function shiftDate(iso: string, days: number): string {
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day + days)).toISOString().slice(0, 10);
+}
+
+/** "6:48 pm" on the day itself, otherwise "Tue 2 Sep, 6:48 pm" (a comma, never a middle dot). */
+export function formatDateTime(timestamp: string | Date, timeZone: string, todayIso: string): string {
+  const date = typeof timestamp === "string" ? new Date(timestamp) : timestamp;
+  if (Number.isNaN(date.getTime())) return "";
+  const day = dateInZone(date, timeZone);
+  const clock = formatClock(date, timeZone);
+  return day === todayIso ? clock : `${formatDayShort(day)}, ${clock}`;
+}
