@@ -1,4 +1,5 @@
 import { REPORT_AUDIO_BUCKET } from "@/lib/report-audio";
+import { EMPTY_RECORDING_ERROR, EMPTY_REPORT_ERROR } from "@/lib/report-status";
 import type { TablesUpdate } from "@/lib/supabase/types";
 import { decideClarification } from "./clarify";
 import { daysBetween, type PipelineDb, toJson } from "./db";
@@ -125,11 +126,7 @@ async function transcribeStep(db: PipelineDb, run: Run, report: LoadedReport): P
   }
 
   if (!transcript && !report.typed_note?.trim()) {
-    throw new UnrecoverableError(
-      report.source === "voice"
-        ? "Nothing could be heard in the recording. The driver should record it again."
-        : "The report was empty.",
-    );
+    throw new UnrecoverableError(report.source === "voice" ? EMPTY_RECORDING_ERROR : EMPTY_REPORT_ERROR);
   }
 
   const { data: rows, error } = await db

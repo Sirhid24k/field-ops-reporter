@@ -4,6 +4,7 @@ import { TodayCard, type TodayReport } from "@/components/field/TodayCard";
 import { requireMember } from "@/lib/auth";
 import { dateInZone } from "@/lib/dates";
 import { firstName, formatTime12h } from "@/lib/format";
+import { failureNeedsRerecord } from "@/lib/report-status";
 
 export const metadata: Metadata = { title: "Today" };
 
@@ -21,7 +22,7 @@ export default async function TodayPage() {
       .order("created_at"),
     supabase
       .from("reports")
-      .select("id, vehicle_id, status, submitted_at, report_date, origin, destination, distance_km")
+      .select("id, vehicle_id, status, submitted_at, report_date, origin, destination, distance_km, source, audio_path, error")
       .eq("user_id", user.id)
       .eq("report_date", todayIso)
       .order("submitted_at", { ascending: false }),
@@ -43,9 +44,11 @@ export default async function TodayPage() {
 
   const list = vehicles ?? [];
   const defaultVehicleId = list.find((vehicle) => vehicle.default_driver_id === profile.id)?.id ?? list[0]?.id ?? null;
-  const todayReports: TodayReport[] = (reports ?? []).map((report) => ({
+  const todayReports: TodayReport[] = (reports ?? []).map(({ source, audio_path, error, ...report }) => ({
     ...report,
     question: questions.get(report.id)?.join(" ") ?? null,
+    // a failure only the driver can fix: nothing was heard, or there is no recording to retry
+    rerecord: failureNeedsRerecord(error) || (source === "voice" && audio_path === null),
   }));
 
   return (

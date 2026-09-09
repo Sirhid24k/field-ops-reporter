@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { AutoRefresh } from "@/components/admin/AutoRefresh";
 import { CountStrip, padCount } from "@/components/admin/CountStrip";
 import { DatePager } from "@/components/admin/DatePager";
 import { PageHeader } from "@/components/admin/PageHeader";
@@ -8,6 +9,7 @@ import { buttonClassName } from "@/components/ui";
 import { loadBoard } from "@/lib/admin/board";
 import { requireStaff } from "@/lib/auth";
 import { dateInZone, isIsoDate } from "@/lib/dates";
+import { isMoving } from "@/lib/report-status";
 
 export const metadata: Metadata = { title: "Today" };
 
@@ -48,6 +50,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Se
           ]}
         />
       </div>
+
+      {/* today's board keeps itself current: a phone report lands and moves through the pipeline without a reload */}
+      {date === today ? <AutoRefresh everyMs={board.rows.some((row) => row.status !== null && isMoving(row.status)) ? 5_000 : 15_000} /> : null}
 
       <ReportTable
         rows={board.rows}

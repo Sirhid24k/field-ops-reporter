@@ -23,6 +23,8 @@ export type TodayReport = {
   distance_km: number | null;
   /** The open clarification question(s), when status is needs_clarification. */
   question: string | null;
+  /** When status is failed: true if only a new recording can fix it, false if the office retries the one that is there. */
+  rerecord: boolean;
 };
 
 export type TodayCardProps = {
@@ -93,6 +95,10 @@ export function TodayCard({ vehicles, defaultVehicleId, reports, todayIso: serve
       return { href: `/app/clarify/${report.id}`, label: "Answer question", style: "primary" as const };
     }
     if (variant === "queued" || variant === "processing" || variant === "sent") {
+      return { href: "/app/new", label: "Record another", style: "secondary" as const };
+    }
+    // a failure on our side keeps the recording; the office retries it, so no re-record is asked for
+    if (variant === "failed" && report && !report.rerecord) {
       return { href: "/app/new", label: "Record another", style: "secondary" as const };
     }
     return { href: "/app/new", label: "Record today’s report", style: "primary" as const };
@@ -260,8 +266,10 @@ function CardBody({
         </>
       );
     case "failed":
-      return (
+      return !report || report.rerecord ? (
         <p className="text-body-lg">This report couldn&rsquo;t be processed. Record it again and the office will get it.</p>
+      ) : (
+        <p className="text-body-lg">Something went wrong on our side. Your recording is safe — we&rsquo;re retrying.</p>
       );
   }
 }

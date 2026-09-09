@@ -11,6 +11,18 @@ export function isMoving(status: ReportStatus): boolean {
 }
 
 /**
+ * The two failures only the driver can fix, by recording again (lib/pipeline/process.ts
+ * throws exactly these). Every other `failed` is on our side: the recording is still in
+ * storage and the office can retry it from the report detail.
+ */
+export const EMPTY_RECORDING_ERROR = "Nothing could be heard in the recording. The driver should record it again.";
+export const EMPTY_REPORT_ERROR = "The report was empty.";
+
+export function failureNeedsRerecord(error: string | null | undefined): boolean {
+  return error === EMPTY_RECORDING_ERROR || error === EMPTY_REPORT_ERROR;
+}
+
+/**
  * report_status → the status vocabulary (design-brief §3). `failed` has no chip:
  * it gets the flag treatment with its own copy instead.
  */

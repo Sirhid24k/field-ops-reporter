@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { after } from "next/server";
 import { z } from "zod";
 import {
   asObject,
@@ -14,11 +15,14 @@ import {
 } from "@/lib/admin/report-fields";
 import { requireStaff } from "@/lib/auth";
 import { errorMessage } from "@/lib/pipeline/errors";
+import { triggerProcessing } from "@/lib/pipeline/internal";
 import { logPipeline } from "@/lib/pipeline/log";
 import { recheckReport } from "@/lib/pipeline/recheck";
+import { moveReportStatus } from "@/lib/pipeline/status";
 import { summarize } from "@/lib/pipeline/summary";
 import { REPORT_AUDIO_BUCKET } from "@/lib/report-audio";
-import type { ReportStatus } from "@/lib/report-status";
+import { failureNeedsRerecord, isMoving, type ReportStatus } from "@/lib/report-status";
+import { getRequestOrigin } from "@/lib/request-origin";
 import type { Json, TablesUpdate } from "@/lib/supabase/types";
 
 /**
@@ -104,6 +108,34 @@ export async function rejectReport(_prev: ReviewState, formData: FormData): Prom
   if (error) return { error: `Couldn't reject the report: ${error.message}` };
   if (!moved || moved.length === 0) return { error: CHANGED };
 
+  revalidatePath("/dashboard", "layout");
+  return undefined;
+}
+
+/**
+ * Retry a failed report: back to `queued` with the retry counter cleared (as the user, under
+ * the staff update policy), then one /api/process for it once this response is out, the same
+ * trigger the field actions use. The driver's Today shows the outcome when it lands.
+ */
+export async function retryProcessing(_prev: ReviewState, formData: FormData): Promise<ReviewState> {
+  const reportId = reportIdFrom(formData);
+  if (!reportId) return { error: "This report couldn't be found." };
+  const { supabase } = await requireStaff();
+
+  const { data: report } = await supabase.from("reports").select("id, status, source, audio_path, error").eq("id", reportId).maybeSingle();
+  if (!report) return { error: "This report couldn't be found." };
+  if (report.status !== "failed") {
+    return { error: isMoving(report.status) ? "This report is already being processed." : "Only a report that failed can be retried." };
+  }
+  if (failureNeedsRerecord(report.error) || (report.source === "voice" && !report.audio_path)) {
+    return { error: "There is nothing to process again. The driver needs to record this report again." };
+  }
+
+  const moved = await moveReportStatus(supabase, report.id, "failed", "queued", { requeue_count: 0, error: null, processed_at: null });
+  if (!moved) return { error: CHANGED };
+
+  const origin = await getRequestOrigin();
+  after(() => triggerProcessing(report.id, { origin }));
   revalidatePath("/dashboard", "layout");
   return undefined;
 }

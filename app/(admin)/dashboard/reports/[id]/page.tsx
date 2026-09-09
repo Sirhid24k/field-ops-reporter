@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { AudioPlayer } from "@/components/admin/AudioPlayer";
 import { AutoRefresh } from "@/components/admin/AutoRefresh";
 import { FieldList, type FieldRowView } from "@/components/admin/FieldList";
+import { RetryProcessing } from "@/components/admin/RetryProcessing";
 import { ReviewButtons } from "@/components/admin/ReviewButtons";
 import { StatusChip } from "@/components/ui";
 import { chipForRow } from "@/lib/admin/board";
@@ -21,7 +22,7 @@ import { requireStaff } from "@/lib/auth";
 import { cn } from "@/lib/cn";
 import { dateInZone, formatClock, formatDateTime, formatDayShort } from "@/lib/dates";
 import { formatGrouped } from "@/lib/format";
-import { isMoving } from "@/lib/report-status";
+import { failureNeedsRerecord, isMoving } from "@/lib/report-status";
 
 export const metadata: Metadata = { title: "Report" };
 
@@ -75,6 +76,7 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
   const incidents = incidentsFrom(extracted);
   const notes = typeof extracted?.notes === "string" ? extracted.notes : null;
   const canEdit = EDITABLE_STATUSES.has(report.status);
+  const rerecord = failureNeedsRerecord(report.error) || (report.source === "voice" && !report.audio_path);
   const startFromLastReading = extracted !== null && extracted.odometer_start === null && report.odometer_start !== null && !edited.has("odometer_start");
   // the pipeline multiplies litres by the quoted price per litre when the driver gave no total
   const pricePerLitre = typeof extracted?.fuel_price_per_l_ngn === "number" ? extracted.fuel_price_per_l_ngn : null;
@@ -251,9 +253,20 @@ export default async function ReportPage({ params }: { params: Promise<{ id: str
           ) : null}
 
           {report.status === "failed" ? (
-            <p className="mt-5 border-l-4 border-flag bg-flag/12 px-3 py-2 text-body">
-              This report couldn&rsquo;t be processed{report.error ? `: ${report.error}` : "."} The driver can record it again.
-            </p>
+            <div className="mt-5 border-l-4 border-flag bg-flag/12 px-3 py-3">
+              <p className="text-body">This report couldn&rsquo;t be processed{report.error ? `: ${report.error}` : "."}</p>
+              {rerecord ? (
+                <p className="mt-1 text-body text-steel">The driver needs to record it again; their phone says so.</p>
+              ) : (
+                <>
+                  <p className="mt-1 text-body text-steel">
+                    {report.source === "voice" ? "The recording is still here." : "The typed report is still here."} Retry runs it through the pipeline
+                    again; this page and the driver&rsquo;s phone update on their own.
+                  </p>
+                  <RetryProcessing reportId={report.id} />
+                </>
+              )}
+            </div>
           ) : null}
 
           {clarifications && clarifications.length > 0 ? (
