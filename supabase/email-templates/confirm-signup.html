@@ -1,0 +1,9 @@
+<!-- Supabase dashboard → Authentication → Email Templates → Confirm signup (an address signing in for
+     the first time; signInWithOtp sends this one to new users).
+     Subject: Your Field Ops Reporter code -->
+<h2>Your Field Ops Reporter code</h2>
+<p>Welcome. Your Field Ops Reporter code is: <strong style="font-size: 24px; letter-spacing: 4px;">{{ .Token }}</strong></p>
+<p>Type it into the app to finish signing in. It works once and expires in an hour.</p>
+<p>Opening this on the same phone or computer as the app? You can tap this instead:<br>
+<a href="{{ .RedirectTo }}&token_hash={{ .TokenHash }}&type=signup">Sign in to Field Ops Reporter</a></p>
+<p>Didn't ask for a code? You can ignore this email.</p>
