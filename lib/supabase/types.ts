@@ -19,6 +19,7 @@ export type Database = {
           message: string;
           org_id: string;
           report_id: string | null;
+          seed_tag: string | null;
           severity: Database["public"]["Enums"]["alert_severity"];
           status: Database["public"]["Enums"]["alert_status"];
           type: string;
@@ -32,6 +33,7 @@ export type Database = {
           message: string;
           org_id: string;
           report_id?: string | null;
+          seed_tag?: string | null;
           severity: Database["public"]["Enums"]["alert_severity"];
           status?: Database["public"]["Enums"]["alert_status"];
           type: string;
@@ -45,6 +47,7 @@ export type Database = {
           message?: string;
           org_id?: string;
           report_id?: string | null;
+          seed_tag?: string | null;
           severity?: Database["public"]["Enums"]["alert_severity"];
           status?: Database["public"]["Enums"]["alert_status"];
           type?: string;
@@ -92,6 +95,7 @@ export type Database = {
           org_id: string;
           question: string;
           report_id: string;
+          seed_tag: string | null;
         };
         Insert: {
           answer_audio_path?: string | null;
@@ -103,6 +107,7 @@ export type Database = {
           org_id: string;
           question: string;
           report_id: string;
+          seed_tag?: string | null;
         };
         Update: {
           answer_audio_path?: string | null;
@@ -114,6 +119,7 @@ export type Database = {
           org_id?: string;
           question?: string;
           report_id?: string;
+          seed_tag?: string | null;
         };
         Relationships: [
           {
@@ -139,6 +145,7 @@ export type Database = {
           generated_at: string;
           id: string;
           org_id: string;
+          seed_tag: string | null;
           stats: Json;
         };
         Insert: {
@@ -147,6 +154,7 @@ export type Database = {
           generated_at?: string;
           id?: string;
           org_id: string;
+          seed_tag?: string | null;
           stats: Json;
         };
         Update: {
@@ -155,6 +163,7 @@ export type Database = {
           generated_at?: string;
           id?: string;
           org_id?: string;
+          seed_tag?: string | null;
           stats?: Json;
         };
         Relationships: [
@@ -175,6 +184,7 @@ export type Database = {
           id: string;
           org_id: string;
           role: Database["public"]["Enums"]["user_role"];
+          seed_tag: string | null;
           used_by: string | null;
         };
         Insert: {
@@ -184,6 +194,7 @@ export type Database = {
           id?: string;
           org_id: string;
           role?: Database["public"]["Enums"]["user_role"];
+          seed_tag?: string | null;
           used_by?: string | null;
         };
         Update: {
@@ -193,6 +204,7 @@ export type Database = {
           id?: string;
           org_id?: string;
           role?: Database["public"]["Enums"]["user_role"];
+          seed_tag?: string | null;
           used_by?: string | null;
         };
         Relationships: [
@@ -248,6 +260,7 @@ export type Database = {
           org_id: string;
           phone: string | null;
           role: Database["public"]["Enums"]["user_role"];
+          seed_tag: string | null;
         };
         Insert: {
           active?: boolean;
@@ -257,6 +270,7 @@ export type Database = {
           org_id: string;
           phone?: string | null;
           role?: Database["public"]["Enums"]["user_role"];
+          seed_tag?: string | null;
         };
         Update: {
           active?: boolean;
@@ -266,6 +280,7 @@ export type Database = {
           org_id?: string;
           phone?: string | null;
           role?: Database["public"]["Enums"]["user_role"];
+          seed_tag?: string | null;
         };
         Relationships: [
           {
@@ -286,6 +301,7 @@ export type Database = {
           new_value: string | null;
           old_value: string | null;
           report_id: string;
+          seed_tag: string | null;
         };
         Insert: {
           created_at?: string;
@@ -295,6 +311,7 @@ export type Database = {
           new_value?: string | null;
           old_value?: string | null;
           report_id: string;
+          seed_tag?: string | null;
         };
         Update: {
           created_at?: string;
@@ -304,6 +321,7 @@ export type Database = {
           new_value?: string | null;
           old_value?: string | null;
           report_id?: string;
+          seed_tag?: string | null;
         };
         Relationships: [
           {
@@ -346,6 +364,7 @@ export type Database = {
           requeue_count: number;
           reviewed_at: string | null;
           reviewed_by: string | null;
+          seed_tag: string | null;
           source: Database["public"]["Enums"]["report_source"];
           status: Database["public"]["Enums"]["report_status"];
           submitted_at: string;
@@ -381,6 +400,7 @@ export type Database = {
           requeue_count?: number;
           reviewed_at?: string | null;
           reviewed_by?: string | null;
+          seed_tag?: string | null;
           source: Database["public"]["Enums"]["report_source"];
           status?: Database["public"]["Enums"]["report_status"];
           submitted_at?: string;
@@ -416,6 +436,7 @@ export type Database = {
           requeue_count?: number;
           reviewed_at?: string | null;
           reviewed_by?: string | null;
+          seed_tag?: string | null;
           source?: Database["public"]["Enums"]["report_source"];
           status?: Database["public"]["Enums"]["report_status"];
           submitted_at?: string;
@@ -470,6 +491,7 @@ export type Database = {
           label: string | null;
           org_id: string;
           plate_number: string;
+          seed_tag: string | null;
           vehicle_type: string | null;
         };
         Insert: {
@@ -481,6 +503,7 @@ export type Database = {
           label?: string | null;
           org_id: string;
           plate_number: string;
+          seed_tag?: string | null;
           vehicle_type?: string | null;
         };
         Update: {
@@ -492,6 +515,7 @@ export type Database = {
           label?: string | null;
           org_id?: string;
           plate_number?: string;
+          seed_tag?: string | null;
           vehicle_type?: string | null;
         };
         Relationships: [

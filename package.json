@@ -15,7 +15,8 @@
     "icons": "tsx scripts/make-icons.mts",
     "test": "vitest run",
     "pipeline:test": "tsx scripts/pipeline-test.mts",
-    "digest:test": "tsx scripts/digest-test.mts"
+    "digest:test": "tsx scripts/digest-test.mts",
+    "seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
     "@google/genai": "^2.21.0",
