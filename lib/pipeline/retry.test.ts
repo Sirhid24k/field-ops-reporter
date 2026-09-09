@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { RetryableError, UnrecoverableError } from "./errors";
-import { attemptTimeoutMs, backoffDelayMs, MIN_ATTEMPT_MS, withRetries } from "./retry";
+import { attemptTimeoutMs, backoffDelayMs, MIN_ATTEMPT_MS, MIN_ATTEMPT_TIMEOUT_MS, withRetries } from "./retry";
 
 function harness(deadlineAt: number | null = null) {
   let clock = 1_000_000;
@@ -30,11 +30,14 @@ describe("backoff", () => {
     expect(backoffDelayMs(1, 120_000)).toBe(30_000);
   });
 
-  it("fits an attempt's timeout to the time left", () => {
+  it("fits an attempt's timeout to the time left, never below the provider minimum", () => {
     expect(attemptTimeoutMs(25_000, null)).toBe(25_000);
     expect(attemptTimeoutMs(25_000, 40_000)).toBe(25_000);
-    expect(attemptTimeoutMs(25_000, 10_000)).toBe(9_000);
-    expect(attemptTimeoutMs(25_000, 500)).toBe(1_000);
+    expect(attemptTimeoutMs(25_000, 16_000)).toBe(15_000);
+    // Gemini rejects a deadline under 10 s with a 400, so the floor is 10 s whatever is left
+    expect(attemptTimeoutMs(25_000, 10_000)).toBe(MIN_ATTEMPT_TIMEOUT_MS);
+    expect(attemptTimeoutMs(25_000, 500)).toBe(MIN_ATTEMPT_TIMEOUT_MS);
+    expect(MIN_ATTEMPT_MS).toBeGreaterThan(MIN_ATTEMPT_TIMEOUT_MS + 1_000);
   });
 });
 
@@ -93,6 +96,22 @@ describe("withRetries", () => {
       name: "RetryableError",
       message: "Gemini is overloaded (503) (gave up after 1 attempt: not enough time left in this run for another)",
     });
+    expect(calls).toBe(1);
+    expect(delays).toEqual([]);
+  });
+
+  it("requeues rather than start a second attempt with a deadline Gemini would reject (2026-09-09 preview run)", async () => {
+    // 40 s budget: the first attempt gets a 504 after 24.4 s; after the 5 s backoff only ~10 s
+    // would be left, under the 12 s an attempt needs, so no 8 s-deadline call is ever made
+    const { options, delays, advance } = harness(1_000_000 + 40_000);
+    let calls = 0;
+    const fn = async (attempt: { remainingMs: number | null }) => {
+      calls += 1;
+      expect(attemptTimeoutMs(25_000, attempt.remainingMs)).toBeGreaterThanOrEqual(MIN_ATTEMPT_TIMEOUT_MS);
+      advance(24_406);
+      throw new RetryableError("Gemini gemini-3.5-flash is rate limited or unavailable (504). Will retry.");
+    };
+    await expect(withRetries(fn, options)).rejects.toMatchObject({ name: "RetryableError" });
     expect(calls).toBe(1);
     expect(delays).toEqual([]);
   });

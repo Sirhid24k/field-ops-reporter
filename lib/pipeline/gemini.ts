@@ -87,6 +87,12 @@ function translate(error: unknown, model: string): Error {
     if (isRetryableStatus(error.status)) {
       return new RetryableError(`Gemini ${model} is rate limited or unavailable (${error.status}). Will retry.`, { cause: error });
     }
+    // A deadline the API considers too short (under 10 s) is about our time budget, not the
+    // report: lib/pipeline/retry.ts no longer sizes an attempt that low, and if it ever did,
+    // the right outcome is a requeue with a fresh budget, not a failed report.
+    if (error.status === 400 && /deadline/i.test(error.message) && /too short|minimum/i.test(error.message)) {
+      return new RetryableError(`Gemini ${model} refused the request deadline (${error.status}): ${error.message}. Will retry with a fresh budget.`, { cause: error });
+    }
     return new UnrecoverableError(`Gemini ${model} rejected the request (${error.status}): ${error.message}`, { cause: error });
   }
   // fetch failures and aborted timeouts: worth another go

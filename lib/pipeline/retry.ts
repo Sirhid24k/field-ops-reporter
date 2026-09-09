@@ -15,8 +15,18 @@ export const RETRY_BASE_DELAY_MS = 5_000;
 export const RETRY_MAX_DELAY_MS = 10_000;
 /** A Retry-After longer than this is not worth waiting for in one invocation. */
 export const RETRY_AFTER_CAP_MS = 30_000;
-/** The least time an attempt needs; with less than this left, the run gives up and requeues. */
-export const MIN_ATTEMPT_MS = 8_000;
+/**
+ * The shortest timeout an attempt may be given. Gemini rejects any request deadline under
+ * 10 s outright (400 "Manually set deadline 8s is too short. Minimum allowed deadline is
+ * 10s."), which is not retryable, so an attempt is never sized below this.
+ */
+export const MIN_ATTEMPT_TIMEOUT_MS = 10_000;
+/**
+ * The least time an attempt needs, timeout plus a second of bookkeeping; with less than this
+ * left, the run gives up and requeues rather than start a call that cannot be honoured.
+ * Seen on 2026-09-09: a 504 after 24 s, a 5 s backoff, 8 s left, an 8 s deadline, a 400.
+ */
+export const MIN_ATTEMPT_MS = MIN_ATTEMPT_TIMEOUT_MS + 2_000;
 
 export type RetryOptions = {
   /** What is being retried, for the log line: "stt", "extract". */
@@ -48,10 +58,14 @@ export function backoffDelayMs(retry: number, retryAfterMs: number | null = null
   return Math.max(backoff, asked);
 }
 
-/** A per-attempt timeout that also fits what is left of the run (a second is kept back for bookkeeping). */
+/**
+ * A per-attempt timeout that also fits what is left of the run (a second is kept back for
+ * bookkeeping), never below the provider minimum. withRetries does not start an attempt with
+ * less than MIN_ATTEMPT_MS left, so the floor only ever adds margin.
+ */
 export function attemptTimeoutMs(preferredMs: number, remainingMs: number | null): number {
   if (remainingMs === null) return preferredMs;
-  return Math.max(1_000, Math.min(preferredMs, remainingMs - 1_000));
+  return Math.max(MIN_ATTEMPT_TIMEOUT_MS, Math.min(preferredMs, remainingMs - 1_000));
 }
 
 /**
