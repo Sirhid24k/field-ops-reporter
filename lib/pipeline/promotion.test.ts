@@ -51,8 +51,16 @@ describe("promotion", () => {
 
   it("scores the price per litre and keeps the schema's keys in step", () => {
     expect(SCORED_FIELDS).toContain("fuel_price_per_l_ngn");
+    const keys = [...SCORED_FIELDS, "transcript_language", "confidence", "missing_fields", "clarifying_questions"];
     const properties = EXTRACTION_RESPONSE_SCHEMA.properties ?? {};
-    expect(Object.keys(properties)).toEqual([...SCORED_FIELDS, "confidence", "missing_fields", "clarifying_questions"]);
-    expect(EXTRACTION_RESPONSE_SCHEMA.required).toEqual([...SCORED_FIELDS, "confidence", "missing_fields", "clarifying_questions"]);
+    expect(Object.keys(properties)).toEqual(keys);
+    expect(EXTRACTION_RESPONSE_SCHEMA.required).toEqual(keys);
+  });
+
+  it("takes the language chip from the model, as one of two labels or nothing", () => {
+    expect(extractionSchema.parse({ ...base, transcript_language: "Pidgin" }).transcript_language).toBe("Pidgin");
+    expect(extractionSchema.parse({ ...base, transcript_language: "English" }).transcript_language).toBe("English");
+    expect(extractionSchema.parse(base).transcript_language).toBeNull();
+    expect(extractionSchema.parse({ ...base, transcript_language: "Yoruba" }).transcript_language).toBeNull();
   });
 });

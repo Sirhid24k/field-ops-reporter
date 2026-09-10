@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { chipLabel } from "@/components/ui";
 import { incidentsFrom, asObject } from "@/lib/admin/report-fields";
 import { getSession } from "@/lib/auth";
-import { CSV_BOM, csvLine } from "@/lib/csv";
+import { CSV_BOM, csvLine, EXPORT_COLUMNS } from "@/lib/csv";
 import { dateInZone, isIsoDate } from "@/lib/dates";
 import { chipForStatus } from "@/lib/report-status";
 import { isStaff } from "@/lib/roles";
@@ -15,21 +15,7 @@ import { isStaff } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
-const COLUMNS = [
-  "date",
-  "plate",
-  "driver",
-  "status",
-  "origin",
-  "destination",
-  "distance_km",
-  "fuel_liters",
-  "fuel_cost_ngn",
-  "load_type",
-  "load_tonnage",
-  "incidents",
-  "approved_by",
-];
+const COLUMNS = [...EXPORT_COLUMNS];
 
 const PAGE = 500;
 
@@ -56,7 +42,7 @@ export async function GET(request: NextRequest) {
           const { data, error } = await supabase
             .from("reports")
             .select(
-              "report_date, status, origin, destination, distance_km, fuel_liters, fuel_cost_ngn, load_type, load_tonnage, extracted, vehicles(plate_number), profiles!reports_user_id_fkey(full_name), reviewer:profiles!reports_reviewed_by_fkey(full_name)",
+              "report_date, status, origin, destination, odometer_start, odometer_end, distance_km, fuel_liters, fuel_cost_ngn, load_type, load_tonnage, extracted, vehicles(plate_number), profiles!reports_user_id_fkey(full_name), reviewer:profiles!reports_reviewed_by_fkey(full_name)",
             )
             .eq("org_id", orgId)
             .in("status", ["ready", "reviewed"])
@@ -78,6 +64,8 @@ export async function GET(request: NextRequest) {
                   chip ? chipLabel(chip, "admin") : report.status,
                   report.origin,
                   report.destination,
+                  report.odometer_start,
+                  report.odometer_end,
                   report.distance_km,
                   report.fuel_liters,
                   report.fuel_cost_ngn,

@@ -519,6 +519,7 @@ function extractionFor(trip: Trip): Extraction {
     expenses: [],
     incidents: trip.incidents,
     notes: trip.note,
+    transcript_language: trip.source === "voice" ? trip.language : null,
     confidence: {
       report_date: 1,
       trip_status: 0.95,

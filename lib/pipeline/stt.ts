@@ -9,6 +9,8 @@ import { attemptTimeoutMs, withRetries } from "./retry";
  * `language` on the way out is a display label ("English", "Pidgin", "Hausa"), or the
  * provider's own code when we have no label for it. Whisper has no Pidgin model, so a
  * Pidgin recording comes back tagged English; `languageLabel` re-labels it from the words.
+ * Since the language is forced to English (below) this label is only a hint for the
+ * extraction prompt; the stored `transcript_language` is set by the extraction model.
  */
 
 export type RawTranscription = { text: string; language: string | null };
@@ -34,13 +36,20 @@ const DEFAULT_GROQ_MODEL = "whisper-large-v3";
 export const REQUEST_TIMEOUT_MS = 45_000;
 
 /**
- * Whisper's `prompt` is a style guide (max 224 tokens): it steers spellings of place names
- * and units and nudges the model to keep Pidgin words instead of "correcting" them.
+ * Whisper's `prompt` is a style guide (kept under 30 words): it biases the vocabulary toward
+ * the domain, which improves digits and place names, and keeps Pidgin words instead of
+ * "correcting" them.
  */
 const VOCABULARY_PROMPT =
-  "Daily trip report from a Nigerian truck driver, in English or Nigerian Pidgin. " +
-  "Odometer, kilometres, litres, naira, diesel, tonnes, cement, checkpoint, breakdown, wahala. " +
-  "Kaduna, Kano, Abuja, Lagos, Lokoja, Minna, Zaria, Sokoto, Jos, Onitsha, Port Harcourt.";
+  "Nigerian truck driver's trip report. Odometer reading, litres of diesel, naira, checkpoint, Road Safety, wahala. " +
+  "Lagos, Ibadan, Abuja, Kaduna, Kano, Zaria, Lokoja, Minna, Jos. Plate KTU 421 XA, T-25783-LA.";
+
+/**
+ * Whisper's language detector mislabels Nigerian-accented English (a plainly English report
+ * came back as Yoruba), so every transcription is forced to English: drivers speak English or
+ * Pidgin, and Whisper has no Pidgin model either way. Hausa stays on the roadmap.
+ */
+const FORCED_LANGUAGE = "en";
 
 function bytesOf(audio: Buffer): ArrayBuffer {
   return audio.buffer.slice(audio.byteOffset, audio.byteOffset + audio.byteLength) as ArrayBuffer;
@@ -65,6 +74,7 @@ const groq: SttProvider = {
     form.append("model", model);
     form.append("response_format", "verbose_json");
     form.append("temperature", "0");
+    form.append("language", FORCED_LANGUAGE);
     form.append("prompt", VOCABULARY_PROMPT);
 
     let response: Response;

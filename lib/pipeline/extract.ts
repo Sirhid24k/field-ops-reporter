@@ -16,6 +16,8 @@ import { deriveFuelCost } from "./validate";
 export const TRIP_STATUSES = ["completed", "in_progress", "not_started", "blocked"] as const;
 export const INCIDENT_TYPES = ["breakdown", "accident", "delay", "checkpoint", "theft", "other"] as const;
 export const SEVERITIES = ["low", "medium", "high"] as const;
+/** The language chip: decided by the model from the transcript text (Whisper's detector is not trusted on Nigerian accents). */
+export const TRANSCRIPT_LANGUAGES = ["English", "Pidgin"] as const;
 
 /** Every field that gets a confidence score (spec §6 `confidence: {"<field>": 0.0}`). */
 export const SCORED_FIELDS = [
@@ -36,7 +38,7 @@ export const SCORED_FIELDS = [
   "notes",
 ] as const;
 
-const OUTPUT_KEYS = [...SCORED_FIELDS, "confidence", "missing_fields", "clarifying_questions"] as const;
+const OUTPUT_KEYS = [...SCORED_FIELDS, "transcript_language", "confidence", "missing_fields", "clarifying_questions"] as const;
 
 const nullableString: Schema = { type: Type.STRING, nullable: true };
 const nullableNumber: Schema = { type: Type.NUMBER, nullable: true };
@@ -82,6 +84,7 @@ export const EXTRACTION_RESPONSE_SCHEMA: Schema = {
       },
     },
     notes: { ...nullableString, description: "Anything else the driver said that matters to the office." },
+    transcript_language: { type: Type.STRING, enum: [...TRANSCRIPT_LANGUAGES], description: "The language of the transcript text: Pidgin when it uses Nigerian Pidgin words or grammar, otherwise English." },
     confidence: {
       type: Type.OBJECT,
       properties: Object.fromEntries(SCORED_FIELDS.map((field) => [field, { type: Type.NUMBER }])),
@@ -144,6 +147,12 @@ export const extractionSchema = z.object({
   expenses: z.array(expenseSchema).default([]),
   incidents: z.array(incidentSchema).default([]),
   notes: optionalText,
+  // null when absent or not one of the two labels: the chip then renders nothing
+  transcript_language: z
+    .enum(TRANSCRIPT_LANGUAGES)
+    .nullish()
+    .catch(null)
+    .transform((value) => value ?? null),
   confidence: z.record(z.string(), z.number().nullable()).default({}).transform(clampConfidence),
   missing_fields: z.array(z.string()).default([]),
   clarifying_questions: z.array(z.string()).default([]),
@@ -217,6 +226,7 @@ export const EXTRACTION_SYSTEM_PROMPT = [
   "- clarifying_questions: at most 2, one short plain sentence each, worded for the driver in the language they used, only about required fields that are missing or unclear. Empty when nothing is missing or unclear.",
   "- report_date: the date the report covers, normally the report date you are given.",
   "- Do not judge whether a number is plausible; that is checked elsewhere. Record what was said.",
+  '- transcript_language: "Pidgin" when the transcript uses Nigerian Pidgin words or grammar anywhere (na, dey, don, abeg, wetin, oga, wahala, "make we", "e don"), otherwise "English". Decide from the words in the transcript, never from the accent or the place names.',
   "- Answer with JSON only.",
 ].join("\n");
 

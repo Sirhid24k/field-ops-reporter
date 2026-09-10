@@ -121,8 +121,8 @@ async function transcribeStep(db: PipelineDb, run: Run, report: LoadedReport): P
     const path = report.audio_path as string; // checked before the claim
     const heard = await transcribe(await downloadAudio(db, run, path), mimeForPath(path), sttOptions);
     transcript = heard.text;
-    language = heard.language;
-    await persist(db, report.id, { transcript, transcript_language: language });
+    language = heard.language; // a prompt hint only; the stored language is the extraction's call
+    await persist(db, report.id, { transcript });
   }
 
   if (!transcript && !report.typed_note?.trim()) {
@@ -200,6 +200,8 @@ async function extractStep(db: PipelineDb, run: Run, report: LoadedReport, vehic
     ...promoted,
     extracted: toJson(extraction),
     confidence: toJson(extraction.confidence),
+    // the language chip: the model's reading of the transcript text (English | Pidgin), not Whisper's detector
+    transcript_language: extraction.transcript_language,
     summary: summarize({
       tripStatus: extraction.trip_status,
       origin: extraction.origin,

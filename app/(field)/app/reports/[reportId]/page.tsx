@@ -95,6 +95,13 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ r
 
       <section className="mt-8">
         <h2 className="font-display text-heading font-bold">What you said</h2>
+        {report.transcript_language ? (
+          <p className="mt-3">
+            <span className="inline-flex min-h-6 items-center rounded-control border border-ink px-2 font-display text-body font-semibold leading-5">
+              {report.transcript_language}
+            </span>
+          </p>
+        ) : null}
         {report.transcript ? (
           <p className="mt-3 text-body-lg leading-7">{report.transcript}</p>
         ) : moving ? (

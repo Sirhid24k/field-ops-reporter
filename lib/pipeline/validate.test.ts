@@ -212,6 +212,43 @@ describe("missing_report", () => {
   });
 });
 
+describe("a supervisor corrects the odometer start (the re-check runs both ways)", () => {
+  // the video beat: 214 km on 48 L against a 4.5 km/L baseline is a normal day
+  const corrected: ValidationInput = {
+    odometerStart: 184_220,
+    odometerEnd: 184_434,
+    fuelLiters: 48,
+    fuelCostNgn: 52_000,
+    loadTonnage: 30,
+    incidents: [],
+    lastOdometer: 184_220,
+    daysSinceLastOdometer: 1,
+    fuelBaselineKmPerL: 4.5,
+    hasDuplicate: false,
+  };
+
+  it("a wrong start fails the jump and fuel checks; the corrected start clears both", () => {
+    const wrong = validateReport({ ...corrected, odometerStart: 180_000 }); // 4 434 km in a day on 48 L
+    expect(wrong.results.find((result) => result.rule === "odometer_monotonic")?.passed).toBe(false);
+    expect(wrong.results.find((result) => result.rule === "fuel_efficiency")?.passed).toBe(false);
+    expect(wrong.alerts.map((alert) => alert.type)).toEqual(["odometer_jump", "fuel_outlier"]);
+
+    const fixed = validateReport(corrected);
+    expect(fixed.results.every((result) => result.passed)).toBe(true);
+    expect(fixed.alerts).toEqual([]);
+    expect(fixed.distanceKm).toBe(214);
+  });
+
+  it("an edit that introduces a failure produces exactly that alert", () => {
+    const jump = validateReport({ ...corrected, odometerEnd: 186_000 }); // 1 780 km in a day, 37 km/L
+    expect(jump.alerts.map((alert) => alert.type)).toEqual(["odometer_jump", "fuel_outlier"]);
+
+    const backwards = validateReport({ ...corrected, odometerEnd: 184_100 });
+    expect(backwards.alerts.map((alert) => alert.type)).toEqual(["odometer_backwards"]);
+    expect(backwards.results.find((result) => result.rule === "fuel_efficiency")?.skipped).toBe(true);
+  });
+});
+
 describe("validateReport", () => {
   it("returns all five report rules in order", () => {
     expect(validateReport(base).results.map((result) => result.rule)).toEqual([
