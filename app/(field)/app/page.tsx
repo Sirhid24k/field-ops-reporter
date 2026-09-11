@@ -4,7 +4,7 @@ import { TodayCard, type TodayReport } from "@/components/field/TodayCard";
 import { requireMember } from "@/lib/auth";
 import { dateInZone } from "@/lib/dates";
 import { firstName, formatTime12h } from "@/lib/format";
-import { failureNeedsRerecord } from "@/lib/report-status";
+import { failureNeedsRerecord, olderReportsWaiting } from "@/lib/report-status";
 
 export const metadata: Metadata = { title: "Today" };
 
@@ -28,8 +28,17 @@ export default async function TodayPage() {
       .order("submitted_at", { ascending: false }),
   ]);
 
+  // the office's questions on earlier reports are reachable from here too (Today's card only covers today's report)
+  const { data: earlier } = await supabase
+    .from("reports")
+    .select("id, report_date, status")
+    .eq("user_id", user.id)
+    .eq("status", "needs_clarification")
+    .lt("report_date", todayIso)
+    .order("report_date");
+
   const questions = new Map<string, string[]>();
-  const needing = (reports ?? []).filter((report) => report.status === "needs_clarification").map((report) => report.id);
+  const needing = [...(reports ?? []).filter((report) => report.status === "needs_clarification"), ...(earlier ?? [])].map((report) => report.id);
   if (needing.length > 0) {
     const { data: clarifications } = await supabase
       .from("clarifications")
@@ -41,6 +50,10 @@ export default async function TodayPage() {
       questions.set(row.report_id, [...(questions.get(row.report_id) ?? []), row.question]);
     }
   }
+  const older = olderReportsWaiting(
+    (earlier ?? []).map((report) => ({ ...report, open_questions: questions.get(report.id)?.length ?? 0 })),
+    todayIso,
+  );
 
   const list = vehicles ?? [];
   const defaultVehicleId = list.find((vehicle) => vehicle.default_driver_id === profile.id)?.id ?? list[0]?.id ?? null;
@@ -58,6 +71,7 @@ export default async function TodayPage() {
         vehicles={list.map(({ id, plate_number, label }) => ({ id, plate_number, label }))}
         defaultVehicleId={defaultVehicleId}
         reports={todayReports}
+        olderQuestions={older ? { reportId: older.oldest.id, reportDate: older.oldest.report_date, questions: older.oldest.open_questions, waiting: older.waiting } : null}
         todayIso={todayIso}
         timezone={organization.timezone}
         cutoffLabel={formatTime12h(organization.report_cutoff_time)}

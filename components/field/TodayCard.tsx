@@ -27,12 +27,24 @@ export type TodayReport = {
   rerecord: boolean;
 };
 
+export type OlderQuestions = {
+  /** The oldest report from before today still waiting for the driver's answer. */
+  reportId: string;
+  reportDate: string;
+  /** Open questions on that report. */
+  questions: number;
+  /** How many earlier reports are waiting in all. */
+  waiting: number;
+};
+
 export type TodayCardProps = {
   vehicles: VehicleOption[];
   /** The vehicle whose default driver is this user, else the org's first vehicle. */
   defaultVehicleId: string | null;
   /** Today's reports by this user, newest first. */
   reports: TodayReport[];
+  /** Questions the office still has on an earlier report, if any. */
+  olderQuestions?: OlderQuestions | null;
   todayIso: string;
   timezone: string;
   /** "8:00 pm" */
@@ -51,7 +63,7 @@ function subscribeToClock(callback: () => void) {
  * Client-side because the state comes from three places: the server's rows, the offline
  * queue on this phone, and which vehicle the driver last picked.
  */
-export function TodayCard({ vehicles, defaultVehicleId, reports, todayIso: serverToday, timezone, cutoffLabel }: TodayCardProps) {
+export function TodayCard({ vehicles, defaultVehicleId, reports, olderQuestions = null, todayIso: serverToday, timezone, cutoffLabel }: TodayCardProps) {
   const router = useRouter();
   const { pending, pendingLoaded, lastSentAt } = useFieldNetwork();
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -128,6 +140,13 @@ export function TodayCard({ vehicles, defaultVehicleId, reports, todayIso: serve
         <p className="mt-3 min-h-12 text-body text-steel">No vehicle yet. Ask the office to add one.</p>
       )}
 
+      {olderQuestions ? (
+        <OlderQuestionsCard
+          older={olderQuestions}
+          answerQueued={pendingLoaded && pending.some((item) => item.kind === "clarification" && item.reportId === olderQuestions.reportId)}
+        />
+      ) : null}
+
       <section
         aria-live="polite"
         className={cn(
@@ -172,6 +191,31 @@ export function TodayCard({ vehicles, defaultVehicleId, reports, todayIso: serve
         onClose={() => setSheetOpen(false)}
       />
     </>
+  );
+}
+
+/**
+ * The office's questions on an earlier report, above today's card: "The office has 2 questions
+ * about Tuesday’s report, 2 Sep." with the way to answer them. Today's own report keeps its card.
+ */
+function OlderQuestionsCard({ older, answerQueued }: { older: OlderQuestions; answerQueued: boolean }) {
+  const [weekday, ...rest] = formatDayLong(older.reportDate).split(" ");
+  const others = older.waiting - 1;
+  return (
+    <section className="mt-6 border-l-4 border-hazard bg-hazard/12 px-4 py-4">
+      <StatusChip status="needs_answer" />
+      <p className="mt-3 text-body-lg">
+        The office has {older.questions} question{older.questions === 1 ? "" : "s"} about {weekday}&rsquo;s report, {rest.join(" ")}.
+        {others > 0 ? ` ${others} more report${others === 1 ? " is" : "s are"} waiting for an answer.` : ""}
+      </p>
+      {answerQueued ? (
+        <p className="mt-2 text-body text-steel">Your answer is saved on this phone. It sends when you&rsquo;re back online.</p>
+      ) : (
+        <Link href={`/app/clarify/${older.reportId}`} className={buttonClassName({ variant: "secondary", className: "mt-4" })}>
+          Answer question{older.questions === 1 ? "" : "s"}
+        </Link>
+      )}
+    </section>
   );
 }
 

@@ -14,13 +14,13 @@ export type ClarifyFormProps = {
   reportId: string;
   vehicleId: string;
   reportDate: string;
-  /** "Your report, Tuesday 2 Sep, Kaduna → Kano" */
-  summary: string;
+  /** "Your report, Tuesday 2 Sep, Kaduna → Kano"; omitted when the page around the form already says which report it is. */
+  summary?: string | null;
   questions: string[];
 };
 
-/** F4 — One more thing: the question(s), a voice or typed answer, Send answer. */
-export function ClarifyForm({ reportId, vehicleId, reportDate, summary, questions }: ClarifyFormProps) {
+/** F4 — One more thing: the question(s), a voice or typed answer, Send answer. Also rendered inline on the report detail. */
+export function ClarifyForm({ reportId, vehicleId, reportDate, summary = null, questions }: ClarifyFormProps) {
   const router = useRouter();
   const { submit } = useFieldNetwork();
 
@@ -73,7 +73,7 @@ export function ClarifyForm({ reportId, vehicleId, reportDate, summary, question
 
   return (
     <>
-      <p className="mt-2 text-body text-steel">{summary}</p>
+      {summary ? <p className="mt-2 text-body text-steel">{summary}</p> : null}
       <div className="mt-4 space-y-2">
         {questions.map((question, index) => (
           <p key={index} className="text-body-lg">
@@ -99,6 +99,8 @@ export function ClarifyForm({ reportId, vehicleId, reportDate, summary, question
           onChange={(event) => setAnswer(event.target.value)}
           disabled={sending}
           className="mt-6"
+          // when the keyboard opens the field scrolls into view above the pinned Send zone (96px), not under it
+          textareaClassName="scroll-mb-28"
         />
       </div>
 

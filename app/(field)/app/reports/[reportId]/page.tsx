@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { ClarifyForm } from "@/components/field/ClarifyForm";
 import { BackHeader, Screen } from "@/components/field/Frame";
 import { StatusChip } from "@/components/ui";
 import { requireMember } from "@/lib/auth";
+import { cn } from "@/lib/cn";
 import { formatClock, formatDayLong } from "@/lib/dates";
 import { formatGrouped } from "@/lib/format";
 import { chipForStatus, isMoving } from "@/lib/report-status";
@@ -41,7 +43,7 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ r
   const { data: report } = await supabase
     .from("reports")
     .select(
-      "id, report_date, submitted_at, status, source, typed_note, transcript, transcript_language, trip_status, origin, destination, odometer_start, odometer_end, distance_km, fuel_liters, fuel_cost_ngn, load_type, load_tonnage, extracted, summary, vehicles(plate_number, label)",
+      "id, vehicle_id, report_date, submitted_at, status, source, typed_note, transcript, transcript_language, trip_status, origin, destination, odometer_start, odometer_end, distance_km, fuel_liters, fuel_cost_ngn, load_type, load_tonnage, extracted, summary, vehicles(plate_number, label)",
     )
     .eq("id", reportId)
     .eq("user_id", user.id)
@@ -58,6 +60,11 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ r
   const moving = isMoving(report.status);
   const extracted = asObject(report.extracted);
   const notes = typeof extracted?.notes === "string" ? extracted.notes : null;
+  // the report is the caller's (the query above is filtered by user_id); with open questions
+  // and the status still waiting, the answer form renders here instead of "Not answered yet"
+  const answered = (clarifications ?? []).filter((row) => row.answered_at !== null);
+  const open = (clarifications ?? []).filter((row) => row.answered_at === null);
+  const answerable = report.status === "needs_clarification" && open.length > 0;
 
   const fields: Array<[string, string | null]> = [
     ["Route", report.origin && report.destination ? `${report.origin} → ${report.destination}` : null],
@@ -135,24 +142,37 @@ export default async function ReportDetailPage({ params }: { params: Promise<{ r
       </section>
 
       {clarifications && clarifications.length > 0 ? (
-        <section className="mt-8 mb-8">
+        <section className={cn("mt-8", answerable ? "flex flex-1 flex-col" : "mb-8")}>
           <h2 className="font-display text-heading font-bold">Questions from the office</h2>
-          <ul className="mt-3 space-y-4">
-            {clarifications.map((row) => (
-              <li key={row.id} className="border-l-4 border-hazard pl-3">
-                <p className="text-body-lg">{row.question}</p>
-                <p className="mt-1 text-body text-steel">
-                  {row.answered_at
-                    ? row.answer_text
+          {answered.length > 0 ? (
+            <ul className="mt-3 space-y-4">
+              {answered.map((row) => (
+                <li key={row.id} className="border-l-4 border-hazard pl-3">
+                  <p className="text-body-lg">{row.question}</p>
+                  <p className="mt-1 text-body text-steel">
+                    {row.answer_text
                       ? `You answered: ${row.answer_text}`
                       : row.answer_audio_path
-                        ? `You answered by voice, ${formatClock(row.answered_at, organization.timezone)}`
-                        : "Answered"
-                    : "Not answered yet"}
-                </p>
-              </li>
-            ))}
-          </ul>
+                        ? `You answered by voice, ${formatClock(row.answered_at as string, organization.timezone)}`
+                        : "Answered"}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+          {answerable ? (
+            // the same F4 form as /app/clarify: voice or typed answer, Send answer pinned in the thumb zone
+            <ClarifyForm reportId={report.id} vehicleId={report.vehicle_id} reportDate={report.report_date} questions={open.map((row) => row.question)} />
+          ) : open.length > 0 ? (
+            <ul className={cn("space-y-4", answered.length > 0 ? "mt-4" : "mt-3")}>
+              {open.map((row) => (
+                <li key={row.id} className="border-l-4 border-hazard pl-3">
+                  <p className="text-body-lg">{row.question}</p>
+                  <p className="mt-1 text-body text-steel">Not answered yet</p>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </section>
       ) : (
         <div className="mb-8" />

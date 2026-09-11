@@ -53,7 +53,8 @@ export default async function ReportsPage() {
                 return (
                   <li key={report.id}>
                     <Link
-                      href={`/app/reports/${report.id}`}
+                      // a report waiting for the driver's answer opens the answer screen, not the read-only detail
+                      href={report.status === "needs_clarification" ? `/app/clarify/${report.id}` : `/app/reports/${report.id}`}
                       className="flex min-h-14 items-center justify-between gap-3 border-b border-line py-2"
                     >
                       <span className="min-w-0">

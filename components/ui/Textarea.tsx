@@ -7,9 +7,11 @@ export type TextareaProps = ComponentPropsWithRef<"textarea"> & {
   hint?: string;
   error?: string;
   size?: FieldSize;
+  /** Classes for the textarea element itself (`className` styles the wrapper), like Input's `inputClassName`. */
+  textareaClassName?: string;
 };
 
-export function Textarea({ label, hint, error, size = "default", id, className, ...rest }: TextareaProps) {
+export function Textarea({ label, hint, error, size = "default", id, className, textareaClassName, ...rest }: TextareaProps) {
   const generatedId = useId();
   const textareaId = id ?? generatedId;
   const hintId = hint ? `${textareaId}-hint` : undefined;
@@ -22,7 +24,7 @@ export function Textarea({ label, hint, error, size = "default", id, className, 
         id={textareaId}
         aria-invalid={error ? true : undefined}
         aria-describedby={[errorId, hintId].filter(Boolean).join(" ") || undefined}
-        className={cn(controlClass(size), "min-h-28 resize-y py-3 leading-6")}
+        className={cn(controlClass(size), "min-h-28 resize-y py-3 leading-6", textareaClassName)}
         {...rest}
       />
       {error ? <FieldError id={errorId!}>{error}</FieldError> : null}
