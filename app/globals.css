@@ -99,10 +99,23 @@
   --animate-progress-line: progress-line 1.2s linear infinite;
   --animate-sheet-in: sheet-in 220ms ease-out;
   --animate-drawer-in: drawer-in 220ms ease-out;
+  /* the route-loading lettermark: nothing for 150 ms (the element's own opacity is 0 until the
+     delay ends, so a fast navigation never flashes it), then a slow 0.35 → 1 → 0.35 pulse */
+  --animate-mark-pulse: mark-pulse 1.2s ease-in-out 150ms infinite;
 
   @keyframes text-pulse {
     50% {
       opacity: 0.45;
+    }
+  }
+
+  @keyframes mark-pulse {
+    0%,
+    100% {
+      opacity: 0.35;
+    }
+    50% {
+      opacity: 1;
     }
   }
 

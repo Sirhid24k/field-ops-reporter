@@ -1,9 +1,25 @@
 "use client";
 
-import Link from "next/link";
+import Link, { useLinkStatus } from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
+
+/** The item's label and badge; dims while its navigation is pending, until the page arrives. */
+function NavItemBody({ label, badge }: { label: string; badge: number | null }) {
+  const { pending } = useLinkStatus();
+  return (
+    <span aria-busy={pending || undefined} className={cn("inline-flex items-center gap-2 transition-opacity duration-150", pending && "opacity-60")}>
+      {label}
+      {badge !== null ? (
+        <span className="font-display font-semibold text-flag tabular">
+          {badge}
+          <span className="sr-only"> open</span>
+        </span>
+      ) : null}
+    </span>
+  );
+}
 
 export const NAV_ITEMS: ReadonlyArray<{ href: string; label: string }> = [
   { href: "/dashboard", label: "Today" },
@@ -54,13 +70,7 @@ export function AdminNav({ orgName, openAlerts, signOut }: AdminNavProps) {
                   active ? "bg-ink/6 text-ink" : "text-steel hover:text-ink",
                 )}
               >
-                {item.label}
-                {badge !== null ? (
-                  <span className="font-display font-semibold text-flag tabular">
-                    {badge}
-                    <span className="sr-only"> open</span>
-                  </span>
-                ) : null}
+                <NavItemBody label={item.label} badge={badge} />
               </Link>
             </li>
           );

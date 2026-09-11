@@ -6,5 +6,6 @@ export { Input, type InputProps } from "./Input";
 export { Select, type SelectProps } from "./Select";
 export { Textarea, type TextareaProps } from "./Textarea";
 export { ProgressLine, type ProgressLineProps } from "./ProgressLine";
+export { Lettermark, type LettermarkProps } from "./Lettermark";
 export { Sheet, type SheetProps } from "./Sheet";
 export { Drawer, type DrawerProps } from "./Drawer";
