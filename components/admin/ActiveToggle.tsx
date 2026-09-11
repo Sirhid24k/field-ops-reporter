@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { cn } from "@/lib/cn";
+import { Switch } from "@/components/ui";
 
 export type ActiveToggleProps = {
   active: boolean;
@@ -14,17 +14,16 @@ export type ActiveToggleProps = {
 };
 
 /**
- * The active switch in the Vehicles and People tables (design-brief §5 A4): a switch plus
- * the words "Active" / "Inactive", so the state is text as well as a position. Flips at
- * once and rolls back with a message if the save fails. Soft and reversible.
+ * The active switch in the Vehicles and People tables (design-brief §5 A4): the shared Switch
+ * primitive with the words "Active" / "Inactive", so the state is text as well as a position.
+ * Flips at once and rolls back with a message if the save fails. Soft and reversible.
  */
 export function ActiveToggle({ active, label, onToggle, disabled = false, reason }: ActiveToggleProps) {
   const [value, setValue] = useState(active);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
 
-  function flip() {
-    const next = !value;
+  function flip(next: boolean) {
     setValue(next);
     setError(null);
     startTransition(async () => {
@@ -38,21 +37,7 @@ export function ActiveToggle({ active, label, onToggle, disabled = false, reason
 
   return (
     <span className="inline-flex flex-col items-start">
-      <button
-        type="button"
-        role="switch"
-        aria-checked={value}
-        aria-label={`${label} active`}
-        onClick={flip}
-        disabled={disabled || pending}
-        title={disabled ? reason : undefined}
-        className={cn("inline-flex min-h-10 items-center gap-2 rounded-control px-1", (disabled || pending) && "cursor-not-allowed opacity-60")}
-      >
-        <span aria-hidden="true" className={cn("relative inline-block h-6 w-10 rounded-[12px] border transition-colors", value ? "border-ink bg-ink" : "border-steel bg-transparent")}>
-          <span className={cn("absolute top-0.5 size-[18px] rounded-[9px] transition-transform", value ? "translate-x-[18px] bg-paper" : "translate-x-0.5 bg-steel")} />
-        </span>
-        <span className={cn("font-display text-body font-semibold", value ? "text-ink" : "text-steel")}>{value ? "Active" : "Inactive"}</span>
-      </button>
+      <Switch checked={value} onChange={flip} label={label} disabled={disabled} reason={reason} pending={pending} />
       {error ? (
         <span role="alert" className="text-caption text-flag">
           {error}

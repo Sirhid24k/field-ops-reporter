@@ -1,7 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Drawer, Input, ProgressLine, Select, Sheet } from "@/components/ui";
+import { Button, Drawer, Input, ProgressLine, Select, Sheet, Switch } from "@/components/ui";
+
+/** The Switch in both states, live, plus the inert ones the tables use. */
+export function SwitchDemo() {
+  const [vehicle, setVehicle] = useState(true);
+  const [person, setPerson] = useState(false);
+  return (
+    <div className="flex flex-wrap items-center gap-x-8 gap-y-4">
+      <Switch checked={vehicle} onChange={setVehicle} label="KTU 421 XA" />
+      <Switch checked={person} onChange={setPerson} label="Musa Abdullahi" />
+      <Switch checked disabled reason="You can't deactivate yourself." onChange={() => undefined} label="Ngozi Eze" />
+      <Switch checked={false} disabled onChange={() => undefined} label="A retired vehicle" />
+      <Switch checked pending onChange={() => undefined} label="Saving" />
+    </div>
+  );
+}
 
 export function LoadingButtons() {
   const [loading, setLoading] = useState(false);

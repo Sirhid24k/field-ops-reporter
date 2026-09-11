@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { Button, CHIP_STATUSES, Input, OdometerDigits, Select, StatusChip, Textarea } from "@/components/ui";
-import { DrawerDemo, LoadingButtons, ProgressLineDemo, SheetDemo } from "./Interactive";
+import { DrawerDemo, LoadingButtons, ProgressLineDemo, SheetDemo, SwitchDemo } from "./Interactive";
 
 export const metadata: Metadata = {
   title: "UI gallery",
@@ -206,6 +206,13 @@ export default function UiGalleryPage() {
               className="sm:col-span-2"
             />
           </div>
+        </Section>
+
+        <Section title="Switch">
+          <p className="mb-4 text-body text-steel">
+            On, off, disabled on, disabled off, saving. 44×24 track (convoy on, line off), 18 px paper knob sliding 20 px, the state in words to the right.
+          </p>
+          <SwitchDemo />
         </Section>
 
         <Section title="ProgressLine">
