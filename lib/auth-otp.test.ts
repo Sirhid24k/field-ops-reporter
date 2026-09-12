@@ -29,12 +29,27 @@ describe("safeNext", () => {
   it("allows same-origin paths only", () => {
     expect(safeNext("/app/new")).toBe("/app/new");
     expect(safeNext("/join/abc/complete")).toBe("/join/abc/complete");
+    expect(safeNext("/dashboard/reports/1?tab=x#y")).toBe("/dashboard/reports/1?tab=x#y");
     expect(safeNext("//evil.example")).toBe("/");
     expect(safeNext("/\\evil.example")).toBe("/");
     expect(safeNext("https://evil.example")).toBe("/");
     expect(safeNext("")).toBe("/");
     expect(safeNext(null)).toBe("/");
     expect(safeNext(undefined)).toBe("/");
+  });
+
+  it("rejects whitespace and control characters that resolve to another origin", () => {
+    // browsers and the URL parser strip these, turning "/<ws>/evil" into "//evil" (off-site)
+    const tab = String.fromCharCode(9);
+    const newline = String.fromCharCode(10);
+    const cr = String.fromCharCode(13);
+    const nul = String.fromCharCode(0);
+    expect(safeNext(`/${tab}/evil.example`)).toBe("/");
+    expect(safeNext(`/${newline}/evil.example`)).toBe("/");
+    expect(safeNext(`/${cr}/evil.example`)).toBe("/");
+    expect(safeNext(`/${tab}//evil.example`)).toBe("/");
+    expect(safeNext(`/${nul}/evil.example`)).toBe("/");
+    expect(safeNext("/ /evil.example")).toBe("/");
   });
 });
 

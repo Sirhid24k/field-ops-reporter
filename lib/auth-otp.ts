@@ -33,9 +33,19 @@ export function isCompleteOtpCode(code: string): boolean {
   return code.length === OTP_LENGTH && /^\d+$/.test(code);
 }
 
-/** Only same-origin paths may be used as a post-sign-in destination; anything else goes to the root router. */
+/**
+ * Only same-origin paths may be used as a post-sign-in destination; anything else goes to the
+ * root router. A path must start with a single "/" and carry no backslash and no control or
+ * whitespace character: the URL parser and browsers strip tab/newline/CR, so `"/\t/evil.example"`
+ * would otherwise resolve to `"//evil.example"` (protocol-relative) and open-redirect off-site.
+ * The char-code test avoids embedding control characters in this source file.
+ */
 export function safeNext(value: string | null | undefined): string {
-  if (!value || !value.startsWith("/") || value.startsWith("//") || value.startsWith("/\\")) return "/";
+  if (!value || value[0] !== "/" || value.startsWith("//")) return "/";
+  for (let i = 0; i < value.length; i++) {
+    const code = value.charCodeAt(i);
+    if (code <= 0x20 || code === 0x7f || code === 0x5c) return "/"; // control, space, DEL, backslash
+  }
   return value;
 }
 
