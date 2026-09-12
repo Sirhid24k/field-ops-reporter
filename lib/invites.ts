@@ -120,18 +120,35 @@ export async function completeJoin(user: User, code: string, fallbackName?: stri
 
   const invite = await getInviteByCode(code);
   if (!invite) return { ok: false, reason: "invalid" };
-  if (invite.status !== "valid") return { ok: false, reason: invite.status };
+  if (invite.status === "expired") return { ok: false, reason: "expired" };
+  // status is "valid" or "used"; the atomic claim below is the real single-use gate, so a
+  // retry by the same user whose earlier attempt already claimed the invite still completes.
 
   const metadataName = typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "";
   const fullName = (metadataName || fallbackName || user.email?.split("@")[0] || "New member").trim().slice(0, 80);
 
+  // Claim the invite atomically before creating the profile. `update … where used_by is null`
+  // row-locks, so of two concurrent completions exactly one matches a row and wins; the loser
+  // matches nothing and, unless it was this same user on an earlier attempt, is told it is used.
+  // (Previously each racer inserted its own profile and only then marked the invite used, so a
+  // single-use invite could seed two members — FOR-01.)
+  const { data: claimed, error: claimError } = await admin
+    .from("invites")
+    .update({ used_by: user.id })
+    .eq("id", invite.id)
+    .is("used_by", null)
+    .select("id");
+  if (claimError) return { ok: false, reason: "failed" };
+  if (!claimed || claimed.length === 0) {
+    const { data: current } = await admin.from("invites").select("used_by").eq("id", invite.id).maybeSingle();
+    if (current?.used_by !== user.id) return { ok: false, reason: "used" };
+  }
+
   const { error: profileError } = await admin
     .from("profiles")
     .insert({ id: user.id, org_id: invite.orgId, full_name: fullName, role: invite.role });
-  if (profileError) return { ok: false, reason: "failed" };
-
-  // best effort: a second concurrent completion would already have used the invite
-  await admin.from("invites").update({ used_by: user.id }).eq("id", invite.id).is("used_by", null);
+  // 23505 = the profile already exists (a concurrent same-user completion won); treat as done.
+  if (profileError && profileError.code !== "23505") return { ok: false, reason: "failed" };
 
   return { ok: true, role: invite.role, alreadyMember: false };
 }
