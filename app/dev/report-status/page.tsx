@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Button, Input, StatusChip } from "@/components/ui";
-import { requireMember } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { formatClock, formatDayShort } from "@/lib/dates";
 import { devToolsEnabled } from "@/lib/dev-tools";
 import { chipForStatus } from "@/lib/report-status";
@@ -27,7 +27,7 @@ const STATUSES = Constants.public.Enums.report_status;
  */
 export default async function ReportStatusDevPage() {
   if (!devToolsEnabled()) notFound();
-  const { profile, organization } = await requireMember();
+  const { profile, organization } = await requireStaff();
 
   const admin = createAdminClient();
   const { data: reports } = await admin

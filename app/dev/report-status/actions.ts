@@ -2,17 +2,17 @@
 
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
-import { requireMember } from "@/lib/auth";
+import { requireStaff } from "@/lib/auth";
 import { devToolsEnabled } from "@/lib/dev-tools";
 import { processReport } from "@/lib/pipeline/process";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { Constants, type Enums } from "@/lib/supabase/types";
 
 /**
- * Developer-only helpers for /dev/report-status. They run with the service role so a
- * signed-in driver can flip their own report through every status the pipeline will
- * produce in session 3. Every action re-checks the gate and that the report belongs to
- * the caller's organisation.
+ * Developer-only helpers for /dev/report-status. They run with the service role, so they are
+ * limited to staff (requireStaff) even when the dev gate is open on a preview — otherwise any
+ * signed-in driver on a DEV_TOOLS preview could delete or alter every report in the org
+ * (FOR-05). Every action also re-checks the gate and that the report is in the caller's org.
  */
 
 const STATUSES = Constants.public.Enums.report_status;
@@ -26,7 +26,7 @@ function isStatus(value: string): value is ReportStatus {
 
 async function ownedReport(formData: FormData) {
   if (!devToolsEnabled()) notFound();
-  const { profile } = await requireMember();
+  const { profile } = await requireStaff();
   const reportId = String(formData.get("reportId") ?? "");
   const admin = createAdminClient();
   const { data: report } = await admin.from("reports").select("id, org_id").eq("id", reportId).maybeSingle();
