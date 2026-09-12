@@ -552,6 +552,16 @@ export type Database = {
         Args: Record<PropertyKey, never>;
         Returns: boolean;
       };
+      complete_invite_join: {
+        Args: {
+          p_invite_id: string;
+          p_user_id: string;
+          p_full_name: string;
+          p_org_id: string;
+          p_role: Database["public"]["Enums"]["user_role"];
+        };
+        Returns: string;
+      };
     };
     Enums: {
       alert_severity: "low" | "medium" | "high";

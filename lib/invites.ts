@@ -121,34 +121,25 @@ export async function completeJoin(user: User, code: string, fallbackName?: stri
   const invite = await getInviteByCode(code);
   if (!invite) return { ok: false, reason: "invalid" };
   if (invite.status === "expired") return { ok: false, reason: "expired" };
-  // status is "valid" or "used"; the atomic claim below is the real single-use gate, so a
-  // retry by the same user whose earlier attempt already claimed the invite still completes.
+  // status is "valid" or "used"; the RPC below is the atomic single-use gate.
 
   const metadataName = typeof user.user_metadata?.full_name === "string" ? user.user_metadata.full_name : "";
   const fullName = (metadataName || fallbackName || user.email?.split("@")[0] || "New member").trim().slice(0, 80);
 
-  // Claim the invite atomically before creating the profile. `update … where used_by is null`
-  // row-locks, so of two concurrent completions exactly one matches a row and wins; the loser
-  // matches nothing and, unless it was this same user on an earlier attempt, is told it is used.
-  // (Previously each racer inserted its own profile and only then marked the invite used, so a
-  // single-use invite could seed two members — FOR-01.)
-  const { data: claimed, error: claimError } = await admin
-    .from("invites")
-    .update({ used_by: user.id })
-    .eq("id", invite.id)
-    .is("used_by", null)
-    .select("id");
-  if (claimError) return { ok: false, reason: "failed" };
-  if (!claimed || claimed.length === 0) {
-    const { data: current } = await admin.from("invites").select("used_by").eq("id", invite.id).maybeSingle();
-    if (current?.used_by !== user.id) return { ok: false, reason: "used" };
-  }
+  // One transaction locks the invite, inserts the profile, then marks the invite used, so two
+  // concurrent completions can never both join (FOR-01). It has to be a single statement:
+  // invites.used_by references profiles(id), so the invite can only be marked used after the
+  // profile exists, which is exactly the window the old two-call version raced in.
+  const { data: outcome, error } = await admin.rpc("complete_invite_join", {
+    p_invite_id: invite.id,
+    p_user_id: user.id,
+    p_full_name: fullName,
+    p_org_id: invite.orgId,
+    p_role: invite.role,
+  });
+  if (error) return { ok: false, reason: "failed" };
+  if (outcome === "used") return { ok: false, reason: "used" };
 
-  const { error: profileError } = await admin
-    .from("profiles")
-    .insert({ id: user.id, org_id: invite.orgId, full_name: fullName, role: invite.role });
-  // 23505 = the profile already exists (a concurrent same-user completion won); treat as done.
-  if (profileError && profileError.code !== "23505") return { ok: false, reason: "failed" };
-
-  return { ok: true, role: invite.role, alreadyMember: false };
+  // "ok" = we created the profile; "member" = a concurrent completion for this same user won.
+  return { ok: true, role: invite.role, alreadyMember: outcome === "member" };
 }
